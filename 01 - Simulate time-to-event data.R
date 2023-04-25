@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 11 Apr 2023
 # Date completed: 
-# Date last modified: 
+# Date last modified: 25 Apr 2023
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -14,6 +14,8 @@
 
 library(tidyverse)       # manipulate and clean data
 library(mgcv)
+library(survival)
+library(rethinking)
 
 #_______________________________________________________________________________________________
 # 2. Simulate time-to-event data ----
@@ -82,7 +84,11 @@ data.intrin$Site <- as.factor(sample(sites, size = 100, replace = TRUE))
 data.intrin$Treatment <- as.factor(substr(data.intrin$Site, 1, 1))
 
 # add baseline hazard rate 
-data.intrin$bl.haz <- rlnorm(n = nrow(data.intrin), log(1), log(2))
+# because S = exp(-blhaz), we need to simulate from a reasonable distribution
+# let's say our 6-month survival follows a "tall" beta distribution
+surv.rates <- rbeta(n = nrow(data.intrin), 8, 2)
+
+data.intrin$bl.haz <- -log(surv.rates)
 
 #_______________________________________________________________________________________________
 # 2c. Define tracking period ----
@@ -279,7 +285,15 @@ for (i in unique(data.all$AnimalID)) {
 }
 
 # keep only columns we need for modeling
-final.data.all.1 <- final.data.all %>% dplyr::select(AnimalID, Sex, Mass, Site, Treatment, snow, day, week, status)
+final.data.all.1 <- final.data.all %>% dplyr::select(AnimalID, 
+                                                     Sex, 
+                                                     Mass, 
+                                                     Site, 
+                                                     Treatment, 
+                                                     snow, 
+                                                     day, 
+                                                     week, 
+                                                     status)
 
 # aggregate to weekly survival data
 final.data.all.2 <- data.frame()
@@ -329,7 +343,7 @@ final.data.all.3 <- final.data.all.2 %>% mutate(start.week = as.integer(week) - 
 # median n of weeks survived
 median(as.integer(final.data.all.3$end.week))
 
-# mein n of weeks survived
+# mean n of weeks survived
 min(as.integer(final.data.all.3$end.week))
 
 # max of weeks survived
@@ -370,36 +384,55 @@ ggplot(data = final.data.all.3,
   scale_x_continuous(breaks = seq(1, 26, 2)) +
   xlab("Week of death")
 
-# distribution by Treatment
-ggplot(data = final.data.all.3,
-       aes(x = as.integer(end.week),
-           color = Treatment,
-           fill = Treatment)) +
-  theme_bw() +
-  geom_density(linewidth = 1.25,
-               alpha = 0.25) +
-  theme(panel.grid = element_blank(),
-        legend.position = c(0.8, 0.8)) +
-  scale_x_continuous(breaks = seq(1, 26, 2)) +
-  xlab("Week of death")
+#_______________________________________________________________________________________________
+# 4. Fit Cox regression in Stan ----
+#_______________________________________________________________________________________________
 
-# relationship with Mass
-ggplot(data = final.data.all.3,
-       aes(x = Mass,
-           y = as.integer(end.week))) +
-  theme_bw() +
-  geom_point() +
-  geom_smooth() +
-  theme(panel.grid = element_blank()) +
-  xlab("Mass (kg)")
+# scale continuous variables
+final.data.all.3$Mass.s <- scale(final.data.all.3$Mass)
+final.data.all.3$snow.s <- scale(final.data.all.3$snow)
 
-# relationship with snow
-ggplot(data = final.data.all.3,
-       aes(x = snow,
-           y = status)) +
-  theme_bw() +
-  geom_point() +
-  theme(panel.grid = element_blank()) +
-  xlab("Snow depth (cm)")
+# estimate baseline hazard
+final.data.baseline <- list(status = final.data.all.3$status,
+                            start_week = final.data.all.3$start.week)
 
+m1 <- ulam(
   
+  alist(
+    
+    status ~ dpois(mu),        
+    mu <- bl,
+    
+    # priors
+    bl ~ dexp(1)
+    
+  ), data = final.data.baseline, 
+     chains = 4, 
+     cores = 4
+)
+
+precis(m1)
+
+# estimate covariate effects - mass
+final.data.cov <- list(status = final.data.all.3$status,
+                       start_week = final.data.all.3$start.week,
+                       mass = final.data.all.3$Mass.s)
+
+m2 <- ulam(
+  
+  alist(
+    
+    status ~ dpois(mu),        
+    mu <- bl * exp(b1*mass),
+    
+    # priors
+    bl ~ dexp(1),
+    b1 ~ dnorm(0, 1)
+    
+  ), data = final.data.cov, 
+  chains = 4, 
+  cores = 4
+)
+
+precis(m2)
+traceplot(m2)
