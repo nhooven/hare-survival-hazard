@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 11 Apr 2023
 # Date completed: 
-# Date last modified: 25 Apr 2023
+# Date last modified: 26 Apr 2023
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -15,7 +15,7 @@
 library(tidyverse)       # manipulate and clean data
 library(mgcv)
 library(survival)
-library(rethinking)
+library(rethinking)      # ulam function
 
 #_______________________________________________________________________________________________
 # 2. Simulate time-to-event data ----
@@ -83,10 +83,10 @@ data.intrin$Site <- as.factor(sample(sites, size = 100, replace = TRUE))
 # add treatment
 data.intrin$Treatment <- as.factor(substr(data.intrin$Site, 1, 1))
 
-# add baseline hazard rate 
+# add baseline hazard rate (weekly)
 # because S = exp(-blhaz), we need to simulate from a reasonable distribution
-# let's say our 6-month survival follows a "tall" beta distribution
-surv.rates <- rbeta(n = nrow(data.intrin), 8, 2)
+# let's say our weekly survival follows a "tall", left-skewed beta distribution
+surv.rates <- rbeta(n = nrow(data.intrin), 15, 1)
 
 data.intrin$bl.haz <- -log(surv.rates)
 
@@ -392,27 +392,6 @@ ggplot(data = final.data.all.3,
 final.data.all.3$Mass.s <- scale(final.data.all.3$Mass)
 final.data.all.3$snow.s <- scale(final.data.all.3$snow)
 
-# estimate baseline hazard
-final.data.baseline <- list(status = final.data.all.3$status,
-                            start_week = final.data.all.3$start.week)
-
-m1 <- ulam(
-  
-  alist(
-    
-    status ~ dpois(mu),        
-    mu <- bl,
-    
-    # priors
-    bl ~ dexp(1)
-    
-  ), data = final.data.baseline, 
-     chains = 4, 
-     cores = 4
-)
-
-precis(m1)
-
 # estimate covariate effects - mass
 final.data.cov <- list(status = final.data.all.3$status,
                        start_week = final.data.all.3$start.week,
@@ -436,3 +415,87 @@ m2 <- ulam(
 
 precis(m2)
 traceplot(m2)
+
+#_______________________________________________________________________________________________
+# 5. Sum up cumulative hazard/survival to determine 6-month survival rate ----
+#_______________________________________________________________________________________________
+
+m2.post <- extract.samples(m2)
+
+for (i in 1:length(m2.post$bl)) {
+  
+  m2.post$cumul.haz[i] <- m2.post$bl[i]*total.weeks
+  
+  m2.post$cumul.surv[i] <- exp(-m2.post$cumul.haz[i])
+  
+}
+
+m2.post.df <- data.frame(cumul.surv = m2.post$cumul.surv)
+
+median(m2.post.df$cumul.surv)
+quantile(m2.post.df$cumul.surv, prob = 0.975)
+quantile(m2.post.df$cumul.surv, prob = 0.025)
+max(m2.post.df$cumul.surv)
+min(m2.post.df$cumul.surv)
+
+ggplot(m2.post.df,
+       aes(x = cumul.surv)) +
+  theme_bw() +
+  geom_density(linewidth = 1.25,
+               fill = "lightgray") +
+  geom_vline(xintercept = median(m2.post.df$cumul.surv)) +
+  geom_vline(xintercept = quantile(m2.post.df$cumul.surv, prob = 0.975),
+             linetype = "dashed") +
+  geom_vline(xintercept = quantile(m2.post.df$cumul.surv, prob = 0.025),
+             linetype = "dashed") +
+  theme(panel.grid = element_blank()) +
+  scale_x_continuous(breaks = seq(0.7, 1.0, 0.1)) +
+  coord_cartesian(xlim = c(0.7, 1.0)) +
+  xlab("6-month survival")
+
+#_______________________________________________________________________________________________
+# 6. Survival relationship with covariates ----
+
+med.CI.surv <- function(model, df, post, low = 0.025, high = 0.975) {
+  
+  preds <- rethinking::link(fit = model, data = df, post = post)
+  
+  preds.med <- apply(X = preds, MARGIN = 2, FUN = median)
+  preds.low <- apply(X = preds, MARGIN = 2, FUN = quantile, prob = low)
+  preds.high <- apply(X = preds, MARGIN = 2, FUN = quantile, prob = high)
+  
+  # convert to survival
+  df$preds.med <- exp(-preds.med)
+  df$preds.low <- exp(-preds.low)
+  df$preds.high <- exp(-preds.high)
+  
+  return(df)
+  
+}
+
+#_______________________________________________________________________________________________
+# 6a. Body mass ----
+#_______________________________________________________________________________________________
+
+# THESE SHOULD NOT BE THIS HIGH (yeah the should because they're weekly surival, dummy)
+
+df.mass <- data.frame(mass = seq(min(final.data.cov$mass),
+                                 max(final.data.cov$mass),
+                                 length.out = 100))
+
+med.CI.mass <- med.CI.surv(m2, df.mass, m2.post)
+
+# calculate cumulative survival
+med.CI.mass[ , c(2:4)] <- med.CI.mass[ , c(2:4)]^total.weeks
+
+ggplot(med.CI.mass,
+       aes(x = mass,
+           y = preds.med)) +
+  theme_bw() +
+  geom_line(linewidth = 1.25) +
+  geom_ribbon(aes(ymin = preds.low,
+                  ymax = preds.high),
+              alpha = 0.1) +
+  theme(panel.grid = element_blank()) +
+  xlab("Mass (standardized)") +
+  ylab("Predicted 6-month survival")
