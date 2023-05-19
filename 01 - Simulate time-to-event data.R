@@ -477,7 +477,7 @@ med.CI.surv <- function(model, df, post, low = 0.025, high = 0.975) {
 # 6a. Body mass ----
 #_______________________________________________________________________________________________
 
-# THESE SHOULD NOT BE THIS HIGH (yeah the should because they're weekly surival, dummy)
+# THESE SHOULD NOT BE THIS HIGH (yeah they should because they're weekly surival, dummy)
 
 df.mass <- data.frame(mass = seq(min(final.data.cov$mass),
                                  max(final.data.cov$mass),
