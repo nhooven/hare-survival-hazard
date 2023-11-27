@@ -1,0 +1,171 @@
+# Project: WSU Snowshoe Hare and PCT Project
+# Subproject: Survival and hazard modeling
+# Script: 01 - Clean fates data
+# Author: Nathan D. Hooven, Graduate Research Assistant
+# Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
+# Date began: 19 Nov 2023
+# Date completed: 27 Nov 2023
+# Date last modified: 27 Nov 2023 
+# R version: 4.2.2
+
+#_______________________________________________________________________________________________
+# 1. Load required packages ----
+#_______________________________________________________________________________________________
+
+library(tidyverse)       # manipulate and clean data
+library(lubridate)       # work with dates
+library(survival)        # survsplit function
+
+#_______________________________________________________________________________________________
+# 2. Read in data ----
+#_______________________________________________________________________________________________
+
+fates <- read.csv("fates_covariates_11_20_2023.csv")
+
+#_______________________________________________________________________________________________
+# 3. Select only columns/rows we need ----
+#_______________________________________________________________________________________________
+
+fates.1 <- fates %>% 
+  
+  # remove hare with collar 150.533 for now
+  filter(Notes != "Unknown hare") %>%
+  
+  # select relevant variables
+  dplyr::select(
+  
+    Site,
+    Animal.ID,
+    Sex,
+    Ear.tag,
+    Collar.type,
+    Mass,
+    HFL,
+    Status,
+    Capture.date,
+    Estimated.event.date,
+    Event.type,
+    Include
+    
+  ) %>%
+  
+  # filter out those not to include (e.g., capture-related)
+  filter(Include == "Y") %>%
+  
+  # remove "Include" variables
+  dplyr::select(-Include) 
+  
+#_______________________________________________________________________________________________
+# 4. Impute missing covariate data ----
+#_______________________________________________________________________________________________
+
+# determine mean mass (rounded)
+mean.mass <- round(mean(fates.1$Mass, na.rm = T), digits = 2)
+mean.mass.F <- round(mean(fates.1$Mass[fates.1$Sex == "F"], na.rm = T), digits = 2)
+mean.mass.M <- round(mean(fates.1$Mass[fates.1$Sex == "M"], na.rm = T), digits = 2)
+
+# determine mean HFL (rounded)
+mean.hfl <- round(mean(fates.1$HFL, na.rm = T), digits = 1)
+mean.hfl.F <- round(mean(fates.1$HFL[fates.1$Sex == "F"], na.rm = T), digits = 1)
+mean.hfl.M <- round(mean(fates.1$HFL[fates.1$Sex == "M"], na.rm = T), digits = 1)
+
+# add mean values to each missing value
+# mass
+fates.1$Mass[fates.1$Ear.tag == 399] <- mean.mass.F
+fates.1$Mass[fates.1$Ear.tag == 986] <- mean.mass.F
+fates.1$Mass[fates.1$Ear.tag == 989] <- mean.mass.M
+fates.1$Mass[fates.1$Ear.tag == 1883] <- mean.mass.M
+
+# HFL
+fates.1$HFL[fates.1$Ear.tag == 393] <- mean.hfl.M
+fates.1$HFL[fates.1$Ear.tag == 399] <- mean.hfl.F
+fates.1$HFL[fates.1$Ear.tag == 456] <- mean.hfl.M
+fates.1$HFL[fates.1$Ear.tag == 478] <- mean.hfl.M
+fates.1$HFL[fates.1$Ear.tag == 483] <- mean.hfl.M
+fates.1$HFL[fates.1$Ear.tag == 527] <- mean.hfl.F
+fates.1$HFL[fates.1$Ear.tag == 986] <- mean.hfl.F
+fates.1$HFL[fates.1$Ear.tag == 989] <- mean.hfl.M
+fates.1$HFL[fates.1$Ear.tag == 1061] <- mean.hfl.F
+fates.1$HFL[fates.1$Ear.tag == 1062] <- mean.hfl.M
+fates.1$HFL[fates.1$Ear.tag == 1730] <- mean.hfl.M
+fates.1$HFL[fates.1$Ear.tag == 1737] <- mean.hfl.M
+fates.1$HFL[fates.1$Ear.tag == 1883] <- mean.hfl.M
+fates.1$HFL[fates.1$Ear.tag == "399 / 1063"] <- mean.hfl.F
+
+#_______________________________________________________________________________________________
+# 5. Format dates correctly ----
+#_______________________________________________________________________________________________
+
+fates.1$Capture.date <- as.Date(mdy(fates.1$Capture.date))
+fates.1$Estimated.event.date <- as.Date(mdy(fates.1$Estimated.event.date))
+
+# replace NAs as most recently updated date
+fates.1$Estimated.event.date[is.na(fates.1$Estimated.event.date)] <- as.Date("2023-11-20")
+
+#_______________________________________________________________________________________________
+# 6. Split into time periods by week ----
+#_______________________________________________________________________________________________
+
+# here, we will use the survSplit function in the "survival" package to split the dataset by week
+
+# create numeric start and end variables
+# define origin for our analysis (2022-01-01)
+date.origin <- as.numeric(as.Date("2022-01-01"))
+
+fates.1$start <- as.numeric(fates.1$Capture.date) - date.origin
+fates.1$end <- as.numeric(fates.1$Estimated.event.date) - date.origin
+
+# create vector of time points
+cut.points <- seq(1,
+                  as.numeric(as.Date("2023-11-20")) - date.origin,
+                  7)
+
+# create numeric status variable
+fates.1$status.num <- ifelse(fates.1$Event.type == "Mortality",
+                             1,
+                             0)
+
+# survSplit
+fates.2 <- survSplit(Surv(start,
+                          end,
+                          status.num) ~ .,
+                     data = fates.1,
+                     cut = cut.points,
+                     start = "start",
+                     end = "end")
+
+# keep only columns we need
+fates.3 <- fates.2 %>%
+  
+  # select
+  dplyr::select(Site,
+                Animal.ID,
+                Ear.tag,
+                Collar.type,
+                Sex,
+                Mass,
+                HFL,
+                Event.type,
+                start,
+                end,
+                status.num)
+
+# create numeric week variable (back-transform)
+fates.3$week <- as.numeric(format(as.Date(fates.3$end + date.origin, 
+                                          origin = "1970-01-01"), 
+                                  "%W"))
+
+# change 0 weeks to 52
+fates.3$week[fates.3$week == 0] <- 52
+
+# add year variable
+fates.3$year <- ifelse(fates.3$end < 366,
+                       2022,
+                       2023)
+
+#_______________________________________________________________________________________________
+# 7. Save as csv ----
+#_______________________________________________________________________________________________
+
+write.csv(fates.3, "fates_cleaned.csv")
+                         
