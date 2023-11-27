@@ -164,7 +164,60 @@ fates.3$year <- ifelse(fates.3$end < 366,
                        2023)
 
 #_______________________________________________________________________________________________
-# 7. Save as csv ----
+# 7. Standardize covariates ----
+#_______________________________________________________________________________________________
+
+fates.3$Sex.1 <- ifelse(fates.3$Sex == "F",
+                        1,
+                        0)
+
+fates.3$Mass.1 <- as.numeric(scale(fates.3$Mass))
+
+fates.3$HFL.1 <- as.numeric(scale(fates.3$HFL))
+
+#_______________________________________________________________________________________________
+# 8. Add treatment variable ----
+#_______________________________________________________________________________________________
+
+# week 40 for 2A, 2B, 3A, and 3B
+# week 41 for 1A, 1B, 4A, and 4B
+
+fates.3$Treatment <- NA
+
+# controls
+fates.3$Treatment[fates.3$Site %in% c("1C", "2C", "3C", "4C")] <- "Control"
+
+# treatments in 2022
+fates.3$Treatment[fates.3$Site %in% c("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B") &
+                  fates.3$year == 2022] <- "Control"
+
+# 2 and 3 before week 40, 2023
+fates.3$Treatment[fates.3$Site %in% c("2A", "2B", "3A", "3B") &
+                  fates.3$week < 40 &
+                  fates.3$year == 2023] <- "Control"
+
+# 1 and 4 before week 41, 2023
+fates.3$Treatment[fates.3$Site %in% c("1A", "1B", "4A", "4B") &
+                  fates.3$week < 41 &
+                  fates.3$year == 2023] <- "Control"
+
+# rest of NAs for retention units
+fates.3$Treatment[is.na(fates.3$Treatment) &
+                  fates.3$Site %in% c("1A", "2B", "3B", "4A")] <- "Retention"
+
+# rest of NAs for piling units
+fates.3$Treatment[is.na(fates.3$Treatment) &
+                    fates.3$Site %in% c("1B", "2A", "3A", "4B")] <- "Piling"
+
+# create numeric variable
+fates.3$Treatment.1 <- ifelse(fates.3$Treatment == "Control",
+                              1,
+                              ifelse(fates.3$Treatment == "Retention",
+                                     2,
+                                     3))
+
+#_______________________________________________________________________________________________
+# 9. Write to csv ----
 #_______________________________________________________________________________________________
 
 write.csv(fates.3, "fates_cleaned.csv")
