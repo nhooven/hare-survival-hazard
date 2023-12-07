@@ -169,7 +169,7 @@ fates.3$year <- ifelse(fates.3$end < 366,
 
 fates.3$Sex.1 <- ifelse(fates.3$Sex == "F",
                         1,
-                        0)
+                        2)
 
 fates.3$Mass.1 <- as.numeric(scale(fates.3$Mass))
 
