@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 27 Nov 2023 
+# Date last modified: 28 Dec 2023 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -167,9 +167,10 @@ fates.3$year <- ifelse(fates.3$end < 366,
 # 7. Standardize covariates ----
 #_______________________________________________________________________________________________
 
+# use an indicator variable for sex (0 = F [intercept])
 fates.3$Sex.1 <- ifelse(fates.3$Sex == "F",
-                        1,
-                        2)
+                        0,
+                        1)
 
 fates.3$Mass.1 <- as.numeric(scale(fates.3$Mass))
 
@@ -179,42 +180,52 @@ fates.3$HFL.1 <- as.numeric(scale(fates.3$HFL))
 # 8. Add treatment variable ----
 #_______________________________________________________________________________________________
 
+# here, we will use two indicator variables to estimate the effect of each treatment
+# compared to control (i.e., the intercept)
+
 # week 40 for 2A, 2B, 3A, and 3B
 # week 41 for 1A, 1B, 4A, and 4B
 
-fates.3$Treatment <- NA
+fates.3$Treatment.Retention <- NA
+fates.3$Treatment.Piling <- NA
 
 # controls
-fates.3$Treatment[fates.3$Site %in% c("1C", "2C", "3C", "4C")] <- "Control"
+fates.3$Treatment.Retention[fates.3$Site %in% c("1C", "2C", "3C", "4C")] <- 0
+fates.3$Treatment.Piling[fates.3$Site %in% c("1C", "2C", "3C", "4C")] <- 0
 
-# treatments in 2022
-fates.3$Treatment[fates.3$Site %in% c("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B") &
-                  fates.3$year == 2022] <- "Control"
+# treatments in 2022 (akin to controls)
+fates.3$Treatment.Retention[fates.3$Site %in% c("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B") &
+                            fates.3$year == 2022] <- 0
+fates.3$Treatment.Piling[fates.3$Site %in% c("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B") &
+                         fates.3$year == 2022] <- 0
 
 # 2 and 3 before week 40, 2023
-fates.3$Treatment[fates.3$Site %in% c("2A", "2B", "3A", "3B") &
-                  fates.3$week < 40 &
-                  fates.3$year == 2023] <- "Control"
+fates.3$Treatment.Retention[fates.3$Site %in% c("2A", "2B", "3A", "3B") &
+                            fates.3$week < 40 &
+                            fates.3$year == 2023] <- 0
+fates.3$Treatment.Piling[fates.3$Site %in% c("2A", "2B", "3A", "3B") &
+                         fates.3$week < 40 &
+                         fates.3$year == 2023] <- 0
 
 # 1 and 4 before week 41, 2023
-fates.3$Treatment[fates.3$Site %in% c("1A", "1B", "4A", "4B") &
-                  fates.3$week < 41 &
-                  fates.3$year == 2023] <- "Control"
+fates.3$Treatment.Retention[fates.3$Site %in% c("1A", "1B", "4A", "4B") &
+                            fates.3$week < 41 &
+                            fates.3$year == 2023] <- 0
+fates.3$Treatment.Piling[fates.3$Site %in% c("1A", "1B", "4A", "4B") &
+                         fates.3$week < 41 &
+                         fates.3$year == 2023] <- 0
 
 # rest of NAs for retention units
-fates.3$Treatment[is.na(fates.3$Treatment) &
-                  fates.3$Site %in% c("1A", "2B", "3B", "4A")] <- "Retention"
+fates.3$Treatment.Retention[is.na(fates.3$Treatment.Retention) &
+                            fates.3$Site %in% c("1A", "2B", "3B", "4A")] <- 1
+fates.3$Treatment.Piling[is.na(fates.3$Treatment.Piling) &
+                         fates.3$Site %in% c("1A", "2B", "3B", "4A")] <- 0
 
 # rest of NAs for piling units
-fates.3$Treatment[is.na(fates.3$Treatment) &
-                    fates.3$Site %in% c("1B", "2A", "3A", "4B")] <- "Piling"
-
-# create numeric variable
-fates.3$Treatment.1 <- ifelse(fates.3$Treatment == "Control",
-                              1,
-                              ifelse(fates.3$Treatment == "Retention",
-                                     2,
-                                     3))
+fates.3$Treatment.Retention[is.na(fates.3$Treatment.Retention) &
+                            fates.3$Site %in% c("1B", "2A", "3A", "4B")] <- 0
+fates.3$Treatment.Piling[is.na(fates.3$Treatment.Piling) &
+                         fates.3$Site %in% c("1B", "2A", "3A", "4B")] <- 1
 
 #_______________________________________________________________________________________________
 # 9. Write to csv ----
