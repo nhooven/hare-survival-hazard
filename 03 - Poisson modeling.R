@@ -4,8 +4,8 @@
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
-# Date completed: 
-# Date last modified: 28 Dec 2023
+# Date completed: 29 Dec 2023
+# Date last modified: 29 Dec 2023
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -458,7 +458,7 @@ m4 <- rstan::stan(
   a0 ~ normal(0, 1);                     // intercept                  
   
   // model
-  y ~ poisson(exp(a0 + to_vector(basis * w)));                           
+  y ~ poisson(exp(a0 + to_vector(basis * w0)));                           
   
   }",
   
@@ -480,3 +480,210 @@ traceplot(m4)
 
 # now I need to calculate the entire spline first,
 # then exponentiate it to find the spline on the scale we need
+
+#_______________________________________________________________________________________________
+# 7. Examine the spline predictions ----
+#_______________________________________________________________________________________________
+
+# extract draws
+m4.draws <- rstan::extract(m4)
+
+# first, we need to create the "normal" scale predictions
+# we'll start by using the posterior medians and 95% quantiles, then loop through all of them (apply?)
+m4.50 <- data.frame(a0 = median(m4.draws$a0),
+                    w0.1 = median(m4.draws$w0[ ,1]),
+                    w0.2 = median(m4.draws$w0[ ,2]),
+                    w0.3 = median(m4.draws$w0[ ,3]),
+                    w0.4 = median(m4.draws$w0[ ,4]),
+                    w0.5 = median(m4.draws$w0[ ,5]),
+                    w0.6 = median(m4.draws$w0[ ,6]))
+
+m4.lo <- data.frame(a0 = quantile(m4.draws$a0, prob = 0.025),
+                    w0.1 = quantile(m4.draws$w0[ ,1], prob = 0.25),
+                    w0.2 = quantile(m4.draws$w0[ ,2], prob = 0.25),
+                    w0.3 = quantile(m4.draws$w0[ ,3], prob = 0.25),
+                    w0.4 = quantile(m4.draws$w0[ ,4], prob = 0.25),
+                    w0.5 = quantile(m4.draws$w0[ ,5], prob = 0.25),
+                    w0.6 = quantile(m4.draws$w0[ ,6], prob = 0.25))
+
+m4.up <- data.frame(a0 = quantile(m4.draws$a0, prob = 0.975),
+                    w0.1 = quantile(m4.draws$w0[ ,1], prob = 0.75),
+                    w0.2 = quantile(m4.draws$w0[ ,2], prob = 0.75),
+                    w0.3 = quantile(m4.draws$w0[ ,3], prob = 0.75),
+                    w0.4 = quantile(m4.draws$w0[ ,4], prob = 0.75),
+                    w0.5 = quantile(m4.draws$w0[ ,5], prob = 0.75),
+                    w0.6 = quantile(m4.draws$w0[ ,6], prob = 0.75))
+
+# now multiply the "normal" scale weight vector by the basis function matrix
+m4.w0.vec.50 <- t(as.matrix(as.numeric(m4.50[ ,2:7])))
+m4.w0.vec.lo <- t(as.matrix(as.numeric(m4.lo[ ,2:7])))
+m4.w0.vec.up <- t(as.matrix(as.numeric(m4.up[ ,2:7])))
+
+w.by.basis.50 <- sweep(basis, 2, m4.w0.vec.50, `*`)
+w.by.basis.lo <- sweep(basis, 2, m4.w0.vec.lo, `*`)
+w.by.basis.up <- sweep(basis, 2, m4.w0.vec.up, `*`)
+
+w.by.basis.sum.50 <- apply(w.by.basis.50, 1, sum)
+w.by.basis.sum.lo <- apply(w.by.basis.lo, 1, sum)
+w.by.basis.sum.up <- apply(w.by.basis.up, 1, sum)
+
+# add to the intercept (a0)
+spline.pred.50 <- m4.50$a0 + w.by.basis.sum.50
+spline.pred.lo <- m4.lo$a0 + w.by.basis.sum.lo
+spline.pred.up <- m4.up$a0 + w.by.basis.sum.up
+
+# add to data.frame and exponentiate (to transform to hazard scale)
+pred.data <- data.frame(y = exp(spline.pred.50),
+                        lo = exp(spline.pred.lo),
+                        up = exp(spline.pred.up),
+                        week = fates.2$week)
+
+# change fates to max of the spline
+fates.pred <- fates.2 %>% mutate(mort = ifelse(status.num == 1,
+                                               max(pred.data$up),
+                                               min(pred.data$lo)))
+
+ggplot() +
+  
+  # white background
+  theme_bw() +
+  
+  # line for spline prediction
+  geom_line(data = pred.data,
+            aes(x = week,
+                y = y),     
+            linewidth = 1.25) +
+  
+  # ribbon for credible intervals
+  geom_ribbon(data = pred.data,
+            aes(x = week,
+                y = y,
+                ymin = lo,
+                ymax = up),     
+            linewidth = 1.25,
+            alpha = 0.25) +
+  
+  # add jittered points for morts/non-morts
+  geom_jitter(data = fates.pred,
+             aes(x = week,
+                 y = mort),
+             height = 0.0001,
+             alpha = 0.05) +
+  
+  # axis labels
+  ylab("Baseline hazard") +
+  xlab("Week of year")
+  
+#_______________________________________________________________________________________________
+# 8. M5 - Model with covariate effects and a spline on hazard ----
+#_______________________________________________________________________________________________
+
+m5 <- rstan::stan(
+  
+  model_code = "
+  
+  data {
+  
+  // number of observations
+  int N;
+  int num_basis;
+  
+  // response variable (binary, 0-1)
+  int y[N];
+  
+  // time (required for estimating time-variant hazard);
+  // time in week of the year (1-52)
+  vector[N] t;       
+  
+  // spline matrix
+  matrix[N, num_basis] basis;
+  
+  // covariates (continuous)
+  real mass[N];            // standardized mass (kg)
+  real hfl[N];             // standardized hind foot length (cm)
+  
+  // covariates (categorical)
+  int sex[N];              // indicator for sex (0 = F, 1 = M)
+  int ret[N];              // indicator for retention
+  int pil[N];              // indicator for piling
+  
+  }
+  
+  parameters {
+  
+  real a0;                          // intercept
+  vector[num_basis] w0;             // weights
+  real b_sex;                       // slope for sex
+  real b_ret;                       // slope for retention
+  real b_pil;                       // slope for piling
+  real b_mas;                       // slope for mass
+  real b_hfl;                       // slope for hfl
+  
+  }
+  
+  model {
+  
+  // priors (these are on a normal scale)
+  // normal scale priors for spline parameters
+  w0 ~ normal(0, 1);                     // weights
+  a0 ~ normal(0, 1);                     // intercept
+  
+  // coefficients
+  b_sex ~ normal(0, 2.5);                // normal prior on b_sex
+  b_ret ~ normal(0, 2.5);                // normal prior on b_ret
+  b_pil ~ normal(0, 2.5);                // normal prior on b_pil
+  b_mas ~ normal(0, 2.5);                // normal prior on b_mas
+  b_hfl ~ normal(0, 2.5);                // normal prior on b_hfl
+  
+  // model
+  // linear predictor
+  vector[N] bw;
+  vector[N] lambda;
+  
+  bw = to_vector(basis * w0);
+  
+  for (i in 1:N) {
+  
+  lambda[i] = exp(a0 + bw[i]) *
+  
+            exp(b_sex * sex[i] + 
+                b_ret * ret[i] + 
+                b_pil * pil[i] +
+                b_mas * mass[i] +
+                b_hfl * hfl[i]);
+  
+  }
+  
+  y ~ poisson(lambda);
+  
+  }
+  
+  generated quantities {
+  
+  // hazard ratios
+  real hr_sex = exp(b_sex);
+  real hr_ret = exp(b_ret);
+  real hr_pil = exp(b_pil);
+  real hr_mas = exp(b_mas);
+  real hr_hfl = exp(b_hfl);
+  
+  }
+  
+  ",
+  
+  data = fates.stan.1,
+  chains = 4,
+  warmup = 1000,
+  iter = 2000
+  
+)
+
+print(m5)
+plot(m5, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl"))
+traceplot(m5, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl"))
+
+#_______________________________________________________________________________________________
+# 9. Save image ----
+#_______________________________________________________________________________________________
+
+save.image("poisson_model.RData")
