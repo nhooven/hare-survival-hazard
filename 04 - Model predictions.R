@@ -14,6 +14,7 @@
 
 library(tidyverse)       # manipulate and clean data
 library(rstan)           # modeling with Stan
+library(ggridges)        # ridgeline plot
 
 #_______________________________________________________________________________________________
 # 2. Read in data ----
@@ -147,6 +148,7 @@ spline.pred.ci <- spline.preds.df.med.long %>%
   
   mutate(level = factor(level, levels = c("95%", "90%", "75%")))
 
+# plot
 ggplot() +
   
   # white background
@@ -172,3 +174,142 @@ ggplot() +
   ylab("Baseline hazard") +
   xlab("Week of year")
 
+#_______________________________________________________________________________________________
+# 5. Visualize covariate effects and evaluate strength of evidence ----
+#_______________________________________________________________________________________________
+# 5a. All covariates (hazard ratios) - ridgeline plot ----
+#_______________________________________________________________________________________________
+
+# select parameters 
+covariate.draws <- model.draws %>% dplyr::select(hr_sex:hr_hfl)
+
+# pivot
+covariate.draws.long <- covariate.draws %>% 
+  
+  pivot_longer(cols = hr_sex:hr_hfl)
+
+# plot KDEs
+ggplot(covariate.draws.long,
+       aes(x = value,
+           y = name)) +
+  
+  # white background
+  theme_bw() +
+  
+  # KDE
+  geom_density_ridges(fill = "lightgray") +
+  
+  # intercept at 1 (hazard ratio)
+  geom_vline(xintercept = 1,
+             linetype = "dashed") +
+  
+  # coordinates
+  coord_cartesian(xlim = c(0, 3.5)) +
+  
+  # axis labels
+  xlab("Hazard ratio") +
+  ylab("Parameter")
+
+#_______________________________________________________________________________________________
+# 5b. All covariates (hazard ratios) - point estimates [medians] and CIs ----
+#_______________________________________________________________________________________________
+
+# here we'll use 95% and 50% CIs
+sex.ci <- data.frame(med = median(covariate.draws$hr_sex),
+                     lo.1 = quantile(covariate.draws$hr_sex, prob = 0.025),
+                     up.1 = quantile(covariate.draws$hr_sex, prob = 0.975),
+                     lo.2 = quantile(covariate.draws$hr_sex, prob = 0.25),
+                     up.2 = quantile(covariate.draws$hr_sex, prob = 0.75),
+                     var = "sex:M")
+
+ret.ci <- data.frame(med = median(covariate.draws$hr_ret),
+                     lo.1 = quantile(covariate.draws$hr_ret, prob = 0.025),
+                     up.1 = quantile(covariate.draws$hr_ret, prob = 0.975),
+                     lo.2 = quantile(covariate.draws$hr_ret, prob = 0.25),
+                     up.2 = quantile(covariate.draws$hr_ret, prob = 0.75),
+                     var = "retention")
+
+pil.ci <- data.frame(med = median(covariate.draws$hr_pil),
+                     lo.1 = quantile(covariate.draws$hr_pil, prob = 0.025),
+                     up.1 = quantile(covariate.draws$hr_pil, prob = 0.975),
+                     lo.2 = quantile(covariate.draws$hr_pil, prob = 0.25),
+                     up.2 = quantile(covariate.draws$hr_pil, prob = 0.75),
+                     var = "piling")
+
+mas.ci <- data.frame(med = median(covariate.draws$hr_mas),
+                     lo.1 = quantile(covariate.draws$hr_mas, prob = 0.025),
+                     up.1 = quantile(covariate.draws$hr_mas, prob = 0.975),
+                     lo.2 = quantile(covariate.draws$hr_mas, prob = 0.25),
+                     up.2 = quantile(covariate.draws$hr_mas, prob = 0.75),
+                     var = "body mass")
+
+hfl.ci <- data.frame(med = median(covariate.draws$hr_hfl),
+                     lo.1 = quantile(covariate.draws$hr_hfl, prob = 0.025),
+                     up.1 = quantile(covariate.draws$hr_hfl, prob = 0.975),
+                     lo.2 = quantile(covariate.draws$hr_hfl, prob = 0.25),
+                     up.2 = quantile(covariate.draws$hr_hfl, prob = 0.75),
+                     var = "hind foot length")
+
+# bind together
+all.ci <- bind_rows(sex.ci, ret.ci, pil.ci, mas.ci, hfl.ci)
+
+# plot
+ggplot(data = all.ci,
+       aes(x = med,
+           y = var)) +
+  
+  # white background
+  theme_bw() +
+  
+  # vertical line at 1
+  geom_vline(xintercept = 1,
+             linetype = "dashed") +
+  
+  # credible intervals
+  # 95%
+  geom_errorbarh(aes(xmin = lo.1,
+                     xmax = up.1,
+                     y = var),
+                 height = 0,
+                 linewidth = 2,
+                 color = "lightgray") +
+  # 50%
+  geom_errorbarh(aes(xmin = lo.2,
+                     xmax = up.2,
+                     y = var),
+                 height = 0,
+                 linewidth = 2,
+                 color = "gray") +
+  
+  # points
+  geom_point(aes(x = med,
+                 y = var),
+             size = 2.5) +
+  
+  # axis titles
+  xlab("Hazard ratio") +
+  ylab("")
+
+#_______________________________________________________________________________________________
+# 5c. All covariates (hazard ratios) - % of 95% interval on same side of 1 as median ----
+#_______________________________________________________________________________________________
+
+all.ci <- all.ci %>% 
+  
+  # total length of interval
+  mutate(total.interval = up.1 - lo.1) %>%
+  
+  # which side of 1 is the median on?
+  mutate(which.side = ifelse(med > 1,
+                             1,
+                             0)) %>%
+  
+  # determine what proportion is on the same side of 1
+  mutate(v = ifelse(which.side == 1,
+                    (up.1 - 1) / total.interval,
+                    (1 - lo.1) / total.interval)) %>%
+  
+  # change every value > 1 
+  mutate(v = ifelse(v > 1,
+                    1,
+                    v))
