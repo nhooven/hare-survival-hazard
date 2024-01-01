@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 28 Dec 2023 
+# Date last modified: 01 Jan 2024 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -228,7 +228,13 @@ fates.3$Treatment.Piling[is.na(fates.3$Treatment.Piling) &
                          fates.3$Site %in% c("1B", "2A", "3A", "4B")] <- 1
 
 #_______________________________________________________________________________________________
-# 9. Write to csv ----
+# 9. Add cluster variable (will be an index) ----
+#_______________________________________________________________________________________________
+
+fates.3$cluster <- as.numeric(substr(fates.3$Site, 1, 1))
+
+#_______________________________________________________________________________________________
+# 10. Write to csv ----
 #_______________________________________________________________________________________________
 
 write.csv(fates.3, "fates_cleaned.csv")
