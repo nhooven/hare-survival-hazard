@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 29 Dec 2023
 # Date completed: 
-# Date last modified: 29 Dec 2023
+# Date last modified: 01 Jan 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -288,7 +288,10 @@ ggplot(data = all.ci,
   
   # axis titles
   xlab("Hazard ratio") +
-  ylab("")
+  ylab("") +
+  
+  # x-axis scale
+  scale_x_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5, 3, 3.5))
 
 #_______________________________________________________________________________________________
 # 5c. All covariates (hazard ratios) - % of 95% interval on same side of 1 as median ----
