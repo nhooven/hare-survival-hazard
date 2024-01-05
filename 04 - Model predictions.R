@@ -14,6 +14,7 @@
 
 library(tidyverse)       # manipulate and clean data
 library(rstan)           # modeling with Stan
+library(splines)
 library(ggridges)        # ridgeline plot
 
 #_______________________________________________________________________________________________
