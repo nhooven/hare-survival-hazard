@@ -4,7 +4,7 @@
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 08 Jan 2024
-# Date completed: 
+# Date completed: 08 Jan 2024
 # Date last modified: 08 Jan 2024
 # R version: 4.2.2
 
@@ -139,7 +139,20 @@ cor(x = fates.2[ ,c("Mass.1", "HFL.1", "Sex.1", "PC1")],
 # so it captures much of the variability both variables
 
 #_______________________________________________________________________________________________
-# 3c. Residual body condition index ----
+# 4. Body condition indices ----
+
+# I looked at the residual BCI (from Murray 2002) and it was highly (r = 0.89)
+# correlated to mass
+
 #_______________________________________________________________________________________________
 
-# separate by sex
+fates.2$BCI <- fates.2$Mass.1 / fates.2$HFL.1
+
+# examine correlations
+cor(x = fates.2[ ,c("Mass.1", "HFL.1", "Sex.1", "PC1", "BCI")], 
+    method = "pearson")
+
+# TENTATIVE CONCLUSIONS
+# Include the body size synthetic variable (PC1)
+# Body condition index (BCI)
+# And MAYBE sex as it is less strongly correlated to PC1 than mass
