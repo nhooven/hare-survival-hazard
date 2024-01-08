@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
 # Date completed: 29 Dec 2023
-# Date last modified: 01 Jan 2024
+# Date last modified: 08 Jan 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -20,7 +20,7 @@ library(splines)         # construct basic functions
 # 2. Read in and format data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("fates_cleaned.csv")
+fates <- read.csv("fates_cleaned_2.csv")
 
 # keep only columns we need for modeling
 fates.1 <- fates %>% dplyr::select(cluster,
@@ -32,6 +32,8 @@ fates.1 <- fates %>% dplyr::select(cluster,
                                    Sex.1,
                                    Mass.1,
                                    HFL.1,
+                                   PC1,
+                                   BCI,
                                    Treatment.Retention,
                                    Treatment.Piling)
 
@@ -87,6 +89,8 @@ fates.stan.1 <- list(N = nrow(fates.1),
                      sex = fates.1$Sex.1,
                      mass = fates.1$Mass.1,
                      hfl = fates.1$HFL.1,
+                     bsz = fates.1$PC1,
+                     bci = fates.1$BCI,
                      ret = fates.1$Treatment.Retention,
                      pil = fates.1$Treatment.Piling,
                      clust = fates.1$cluster,
@@ -120,8 +124,8 @@ m5 <- rstan::stan(
   matrix[N, num_basis] basis;
   
   // covariates (continuous)
-  real mass[N];            // standardized mass (kg)
-  real hfl[N];             // standardized hind foot length (cm)
+  real bsz[N];             // body size principal component (unitless) 
+  real bci[N];             // standardized body condition index (mass/hfl)
   
   // covariates (categorical)
   int clust[N];            // index for cluster (1-4)
@@ -139,8 +143,8 @@ m5 <- rstan::stan(
   real b_sex;                       // slope for sex
   real b_ret;                       // slope for retention
   real b_pil;                       // slope for piling
-  real b_mas;                       // slope for mass
-  real b_hfl;                       // slope for hfl
+  real b_bsz;                       // slope for body size
+  real b_bci;                       // slope for body condition
   
   }
   
@@ -156,8 +160,8 @@ m5 <- rstan::stan(
   b_sex ~ normal(0, 2.5);                // normal prior on b_sex
   b_ret ~ normal(0, 2.5);                // normal prior on b_ret
   b_pil ~ normal(0, 2.5);                // normal prior on b_pil
-  b_mas ~ normal(0, 2.5);                // normal prior on b_mas
-  b_hfl ~ normal(0, 2.5);                // normal prior on b_hfl
+  b_bsz ~ normal(0, 2.5);                // normal prior on b_bsz
+  b_bci ~ normal(0, 2.5);                // normal prior on b_bci
   
   // model
   // linear predictor
@@ -174,8 +178,8 @@ m5 <- rstan::stan(
                 b_sex * sex[i] + 
                 b_ret * ret[i] + 
                 b_pil * pil[i] +
-                b_mas * mass[i] +
-                b_hfl * hfl[i]);
+                b_bsz * bsz[i] +
+                b_bci * bci[i]);
   
   }
   
@@ -189,8 +193,8 @@ m5 <- rstan::stan(
   real hr_sex = exp(b_sex);
   real hr_ret = exp(b_ret);
   real hr_pil = exp(b_pil);
-  real hr_mas = exp(b_mas);
-  real hr_hfl = exp(b_hfl);
+  real hr_bsz = exp(b_bsz);
+  real hr_bci = exp(b_bci);
   
   }
   
@@ -206,11 +210,11 @@ m5 <- rstan::stan(
 print(m5)
 
 # estimates
-plot(m5, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl"))
+plot(m5, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_bsz", "hr_bci"))
 plot(m5, pars = c("c0[1]", "c0[2]", "c0[3]", "c0[4]"))
 
 # trace
-traceplot(m5, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl"))
+traceplot(m5, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_bsz", "hr_bci"))
 traceplot(m5, pars = c("c0[1]", "c0[2]", "c0[3]", "c0[4]"))
 
 #_______________________________________________________________________________________________
