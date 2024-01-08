@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 29 Dec 2023
 # Date completed: 
-# Date last modified: 01 Jan 2024
+# Date last modified: 08 Jan 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -182,12 +182,12 @@ ggplot() +
 #_______________________________________________________________________________________________
 
 # select parameters 
-covariate.draws <- model.draws %>% dplyr::select(hr_sex:hr_hfl)
+covariate.draws <- model.draws %>% dplyr::select(hr_sex:hr_bci)
 
 # pivot
 covariate.draws.long <- covariate.draws %>% 
   
-  pivot_longer(cols = hr_sex:hr_hfl)
+  pivot_longer(cols = hr_sex:hr_bci)
 
 # plot KDEs
 ggplot(covariate.draws.long,
@@ -237,22 +237,22 @@ pil.ci <- data.frame(med = median(covariate.draws$hr_pil),
                      up.2 = quantile(covariate.draws$hr_pil, prob = 0.75),
                      var = "piling")
 
-mas.ci <- data.frame(med = median(covariate.draws$hr_mas),
-                     lo.1 = quantile(covariate.draws$hr_mas, prob = 0.025),
-                     up.1 = quantile(covariate.draws$hr_mas, prob = 0.975),
-                     lo.2 = quantile(covariate.draws$hr_mas, prob = 0.25),
-                     up.2 = quantile(covariate.draws$hr_mas, prob = 0.75),
-                     var = "body mass")
+bsz.ci <- data.frame(med = median(covariate.draws$hr_bsz),
+                     lo.1 = quantile(covariate.draws$hr_bsz, prob = 0.025),
+                     up.1 = quantile(covariate.draws$hr_bsz, prob = 0.975),
+                     lo.2 = quantile(covariate.draws$hr_bsz, prob = 0.25),
+                     up.2 = quantile(covariate.draws$hr_bsz, prob = 0.75),
+                     var = "body size")
 
-hfl.ci <- data.frame(med = median(covariate.draws$hr_hfl),
-                     lo.1 = quantile(covariate.draws$hr_hfl, prob = 0.025),
-                     up.1 = quantile(covariate.draws$hr_hfl, prob = 0.975),
-                     lo.2 = quantile(covariate.draws$hr_hfl, prob = 0.25),
-                     up.2 = quantile(covariate.draws$hr_hfl, prob = 0.75),
-                     var = "hind foot length")
+bci.ci <- data.frame(med = median(covariate.draws$hr_bci),
+                     lo.1 = quantile(covariate.draws$hr_bci, prob = 0.025),
+                     up.1 = quantile(covariate.draws$hr_bci, prob = 0.975),
+                     lo.2 = quantile(covariate.draws$hr_bci, prob = 0.25),
+                     up.2 = quantile(covariate.draws$hr_bci, prob = 0.75),
+                     var = "body condition index")
 
 # bind together
-all.ci <- bind_rows(sex.ci, ret.ci, pil.ci, mas.ci, hfl.ci)
+all.ci <- bind_rows(sex.ci, ret.ci, pil.ci, bsz.ci, bci.ci)
 
 # plot
 ggplot(data = all.ci,
