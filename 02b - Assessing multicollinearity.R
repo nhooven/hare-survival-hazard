@@ -87,77 +87,34 @@ sex.reg <- lm(data = fates.1,
 
 summary(sex.reg)
 
+# this is pretty convincing evidence that sex and HFL can reliably predict 
+# trends in mass
 
 
-# correlation between continuous covariates (mass and HFL)
-cor(x = fates.1[ ,c("Mass.1", "HFL.1")], method = "pearson")
 
-ggplot(data = fates.1,
-       aes(x = Mass.1,
-           y = HFL.1)) +
-  theme_bw() +
-  geom_point()
+# correlation between covariates
+# mass and HFL
+cor.test(x = fates.1$Mass.1, 
+         y = fates.1$HFL.1,
+         method = "pearson")
 
-# kruskal-wallis tests for continuous by categorical
-# mass by sex
-kruskal.test(x = fates.1$Mass.1, g = fates.1$Sex.1)
+# this is a pretty strong correlation
 
-ggplot(data = fates.1,
-       aes(fill = as.factor(Sex.1),
-           x = Mass.1)) +
-  theme_bw() +
-  geom_density(alpha = 0.5) +
-  theme(legend.position = c(0.8, 0.8))
+# mass and sex
+cor.test(x = fates.1$Mass.1, 
+         y = fates.1$Sex.1,
+         method = "pearson")
 
-# hfl by sex
-kruskal.test(x = fates.1$HFL.1, g = fates.1$Sex.1)
+# slightly weaker, but still substantial
 
-ggplot(data = fates.1,
-       aes(fill = as.factor(Sex.1),
-           x = HFL.1)) +
-  theme_bw() +
-  geom_density(alpha = 0.5) +
-  theme(legend.position = c(0.8, 0.8))
+# hfl and sex
+cor.test(x = fates.1$HFL.1, 
+         y = fates.1$Sex.1,
+         method = "pearson")
 
-# mass by retention
-kruskal.test(x = fates.1$Mass.1, g = fates.1$Treatment.Retention)
+# even weaker, but somewhat related
 
-ggplot(data = fates.1,
-       aes(fill = as.factor(Treatment.Retention),
-           x = Mass.1)) +
-  theme_bw() +
-  geom_density(alpha = 0.5) +
-  theme(legend.position = c(0.8, 0.8))
 
-# hfl by retention
-kruskal.test(x = fates.1$HFL.1, g = fates.1$Treatment.Retention)
-
-ggplot(data = fates.1,
-       aes(fill = as.factor(Treatment.Retention),
-           x = HFL.1)) +
-  theme_bw() +
-  geom_density(alpha = 0.5) +
-  theme(legend.position = c(0.8, 0.8))
-
-# mass by piling
-kruskal.test(x = fates.1$Mass.1, g = fates.1$Treatment.Piling)
-
-ggplot(data = fates.1,
-       aes(fill = as.factor(Treatment.Piling),
-           x = Mass.1)) +
-  theme_bw() +
-  geom_density(alpha = 0.5) +
-  theme(legend.position = c(0.8, 0.8))
-
-# hfl by Piling
-kruskal.test(x = fates.1$HFL.1, g = fates.1$Treatment.Piling)
-
-ggplot(data = fates.1,
-       aes(fill = as.factor(Treatment.Piling),
-           x = HFL.1)) +
-  theme_bw() +
-  geom_density(alpha = 0.5) +
-  theme(legend.position = c(0.8, 0.8))
 
 # variance inflation factors (general Poisson regression)
 vif.model <- glm(status.num ~ Sex.1 + Treatment.Retention + Treatment.Piling + Mass.1 + HFL.1,
@@ -165,3 +122,24 @@ vif.model <- glm(status.num ~ Sex.1 + Treatment.Retention + Treatment.Piling + M
                  family = poisson)
 
 car::vif(vif.model)
+
+# we see somewhat elevated VIFs for mass and hfl (in the basic Poisson glm)
+
+#_______________________________________________________________________________________________
+# 3b. Principal components for hare size ----
+#_______________________________________________________________________________________________
+
+# since both variables are z-score standardized, it is trivial to compute the first PC
+fates.2 <- fates.1 %>% mutate(PC1 = (Mass.1 + HFL.1) / 2)
+
+cor(x = fates.2[ ,c("Mass.1", "HFL.1", "Sex.1", "PC1")], 
+    method = "pearson")
+
+# here each variable is correlated the same to the first PC
+# so it captures much of the variability both variables
+
+#_______________________________________________________________________________________________
+# 3c. Residual body condition index ----
+#_______________________________________________________________________________________________
+
+# separate by sex
