@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 01 Jan 2024 
+# Date last modified: 08 Jan 2024 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -234,8 +234,18 @@ fates.3$Treatment.Piling[is.na(fates.3$Treatment.Piling) &
 fates.3$cluster <- as.numeric(substr(fates.3$Site, 1, 1))
 
 #_______________________________________________________________________________________________
-# 10. Write to csv ----
+# 10. Add principle component "body size" and body condition index ----
 #_______________________________________________________________________________________________
 
-write.csv(fates.3, "fates_cleaned.csv")
+# calculate first principal component axis
+fates.3$PC1 <- (fates.3$Mass.1 + fates.3$HFL.1) / 2
+
+# divide mass by HFL to create a body condition index uncorrelated with either variable
+fates.3$BCI <- fates.3$Mass.1 / fates.3$HFL.1
+
+#_______________________________________________________________________________________________
+# 11. Write to csv ----
+#_______________________________________________________________________________________________
+
+write.csv(fates.3, "fates_cleaned_2.csv")
                          
