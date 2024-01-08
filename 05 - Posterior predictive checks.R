@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 05 Jan 2024
 # Date completed: 
-# Date last modified: 05 Jan 2024
+# Date last modified: 08 Jan 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -99,10 +99,13 @@ ggplot(lifetimes.empirical,
                  fill = NA)
 
 # now, let's look at the censoring rate (probability that the last observation is a zero)
+# first, we'll remove observations that lasted > 40 weeks; our censoring rate seems low
+lifetimes.empirical.1 <- lifetimes.empirical %>% filter(lifetime < 40)
+
 # crudely, this will be the number of censor events * total weeks
-censor.rate <- (nrow(lifetimes.empirical) - 
-                sum(lifetimes.empirical$died)) / 
-  sum(lifetimes.empirical$lifetime)
+censor.rate <- (nrow(lifetimes.empirical.1) - 
+                sum(lifetimes.empirical.1$died)) / 
+  sum(lifetimes.empirical.1$lifetime)
 
 censor.rate
 
@@ -149,7 +152,7 @@ recycle.time <- function(enter = 1,
 #_______________________________________________________________________________________________
 
 # number of simulations, individuals, and simulation timesteps
-n.sim <- 10
+n.sim <- 50
 n.obs <- 200
 n.steps <- 52
 
@@ -308,10 +311,14 @@ ggplot() +
                aes(x = lifetime,
                    group = draw),
                color = "#33CCCC",
-               fill = NA) +
+               fill = NA,
+               alpha = 0.25) +
   
   # empirical distribution
   geom_density(data = lifetimes.empirical %>% filter(died == 1),
                aes(x = lifetime),
                color = "black",
-               fill = NA)
+               fill = NA,
+               linewidth = 1.15)
+
+  
