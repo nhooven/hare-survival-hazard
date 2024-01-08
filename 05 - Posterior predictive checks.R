@@ -114,6 +114,13 @@ censor.prob <- exp(-censor.rate)
 
 censor.prob
 
+# 08 Jan 2024 UPDATE:
+# It seems this crude approximation of the censoring rate is too low- 
+# the posterior predictive simulations extend the average lifetime too long
+# I suspect that this is because of multicollinearity in the data-
+# specifically the correlations between sex and morphometry.
+# The predictive dataset I used assumes independence between sex, mass, and HFL
+
 #_______________________________________________________________________________________________
 # 4b. Simulate distributions of individuals from the posterior ----
 
