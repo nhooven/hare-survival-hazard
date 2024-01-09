@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 29 Dec 2023
 # Date completed: 
-# Date last modified: 08 Jan 2024
+# Date last modified: 09 Jan 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -317,3 +317,5 @@ all.ci <- all.ci %>%
   mutate(v = ifelse(v > 1,
                     1,
                     v))
+
+all.ci
