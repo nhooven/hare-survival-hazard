@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 05 Jan 2024
 # Date completed: 
-# Date last modified: 08 Jan 2024
+# Date last modified: 09 Jan 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -21,6 +21,8 @@ library(splines)
 #_______________________________________________________________________________________________
 
 load("poisson_model.RData")
+
+fates <- read.csv("fates_cleaned_2.csv")
 
 #_______________________________________________________________________________________________
 # 3. Extract parameter estimates ----
@@ -53,7 +55,10 @@ for (i in 1:length(unique(fates.1$Ear.tag))) {
                                              1,
                                              0),
                                sex = focal.df$Sex.1[1],
-                               mass = focal.df$Mass.1[1])
+                               bsz = focal.df$PC1[1],
+                               bci = focal.df$BCI.1[1],
+                               ret = focal.df$Treatment.Retention[1],
+                               pil = focal.df$Treatment.Piling[1])
   
   # bind into master df
   lifetimes.empirical <- rbind(lifetimes.empirical, lifetime.indiv)
@@ -169,14 +174,10 @@ pred.df <- data.frame(id = 1:n.obs)
 # now let's draw enter times and covariate values from empirical distributions
 set.seed(1234)
 
-pred.df <- pred.df %>% mutate(
-  
-  enter = sample(lifetimes.empirical$enter, nrow(pred.df)),        # enter times distributed by our cap times
-  sex = sample(lifetimes.empirical$sex, nrow(pred.df)),            # similar sex ratio
-  mas = sample(lifetimes.empirical$mass, nrow(pred.df)),           # similar mass distribution
-  hfl = 0,                                                         # all hfl at mean
-  ret = 0,                                                         # control
-  pil = 0)                                                         # control
+# use the entire empirical dataset
+pred.df.1 <-lifetimes.empirical %>% dplyr::select(-exit,
+                                                  -lifetime,
+                                                  -died)
 
 # and construct the basis functions for the spline on hazard
 # let's create a prediction df first
@@ -195,16 +196,18 @@ sample.draws <- model.draws[sample(x = nrow(model.draws),
 # nested loop (draw, observation, follow-up)
 lifetimes.all <- data.frame()
 
+start.time <- Sys.time()
+
 for (i in 1:n.sim) {
   
   # focal draw (drawn with replacement)
   focal.draw <- sample.draws %>% slice(i)
   
   # inner loop, by observation
-  for (j in 1:nrow(pred.df)) {
+  for (j in 1:nrow(pred.df.1)) {
     
     # subset
-    focal.df <- pred.df %>% slice(j)
+    focal.df <- pred.df.1 %>% slice(j)
     
     # expand df to an entire year
     focal.df.1 <- data.frame(row = 1:n.steps)
@@ -212,11 +215,11 @@ for (i in 1:n.sim) {
     # fill other columns
     focal.df.1 <- focal.df.1 %>% 
       
-      mutate(id = focal.df$id,
+      mutate(id = focal.df$indiv,
              week = recycle.time(focal.df$enter, n.steps),
              sex = focal.df$sex,
-             mas = focal.df$mas,
-             hfl = focal.df$hfl,
+             bsz = focal.df$bsz,
+             bci = focal.df$bci,
              ret = focal.df$ret,
              pil = focal.df$pil)
     
@@ -240,8 +243,8 @@ for (i in 1:n.sim) {
       
       # and calculate the lambda (total hazard)
       mutate(lambda = h0 * exp(focal.draw$b_sex * sex +
-                               focal.draw$b_mas * mas +
-                               focal.draw$b_hfl * hfl +
+                               focal.draw$b_bsz * bsz +
+                               focal.draw$b_bci * bci +
                                focal.draw$b_ret * ret +
                                focal.draw$b_pil * pil)) %>%
       
@@ -295,7 +298,7 @@ for (i in 1:n.sim) {
     
     # bind into lifetime df
     focal.lifetime <- data.frame(draw = i,
-                                 id = focal.df$id,
+                                 id = focal.df$indiv,
                                  lifetime = focal.lifetime,
                                  died = focal.died)
     
@@ -305,8 +308,18 @@ for (i in 1:n.sim) {
   
 }
 
+# time
+Sys.time() - start.time
+
+# simulation time: 21.57 mins
+  # n.sim = 50
+  # n.obs = 200
+  # n.steps = 52
+
 #_______________________________________________________________________________________________
 # 4c. Examine empirical vs. simulated lifetime distributions ----
+#_______________________________________________________________________________________________
+# 4ci. Distributions ----
 #_______________________________________________________________________________________________
 
 ggplot() +
@@ -328,4 +341,98 @@ ggplot() +
                fill = NA,
                linewidth = 1.15)
 
+#_______________________________________________________________________________________________
+# 4cii. Mean ----
+#_______________________________________________________________________________________________
+
+ggplot() +
   
+  theme_bw() +
+  
+  # simulated 
+  geom_histogram(data = lifetimes.all %>% filter(died == 1) %>%
+                                        group_by(draw) %>%
+                                        summarize(mean = mean(lifetime)),
+               aes(x = mean),
+               fill = "#33CCCC") +
+  
+  # empirical 
+  geom_vline(data = lifetimes.empirical %>% filter(died == 1),
+               aes(xintercept = mean(lifetime)),
+               color = "black",
+             linewidth = 1.25) +
+  
+  # axis titles
+  xlab("Mean lifetime")
+
+#_______________________________________________________________________________________________
+# 4ciii. SD ----
+#_______________________________________________________________________________________________
+
+ggplot() +
+  
+  theme_bw() +
+  
+  # simulated 
+  geom_histogram(data = lifetimes.all %>% filter(died == 1) %>%
+                   group_by(draw) %>%
+                   summarize(sd = sd(lifetime)),
+                 aes(x = sd),
+                 fill = "#33CCCC") +
+  
+  # empirical 
+  geom_vline(data = lifetimes.empirical %>% filter(died == 1),
+             aes(xintercept = sd(lifetime)),
+             color = "black",
+             linewidth = 1.25) +
+  
+  # axis titles
+  xlab("SD lifetime")
+
+#_______________________________________________________________________________________________
+# 4civ. Min ----
+#_______________________________________________________________________________________________
+
+ggplot() +
+  
+  theme_bw() +
+  
+  # simulated 
+  geom_histogram(data = lifetimes.all %>% filter(died == 1) %>%
+                                          group_by(draw) %>%
+                                          summarize(min = min(lifetime)),
+                 aes(x = min),
+                 fill = "#33CCCC") +
+  
+  # empirical 
+  geom_vline(data = lifetimes.empirical %>% filter(died == 1),
+             aes(xintercept = min(lifetime)),
+             color = "black",
+             linewidth = 1.25) +
+  
+  # axis titles
+  xlab("Min lifetime")
+
+#_______________________________________________________________________________________________
+# 4cv. Max ----
+#_______________________________________________________________________________________________
+
+ggplot() +
+  
+  theme_bw() +
+  
+  # simulated 
+  geom_histogram(data = lifetimes.all %>% filter(died == 1) %>%
+                   group_by(draw) %>%
+                   summarize(max = max(lifetime)),
+                 aes(x = max),
+                 fill = "#33CCCC") +
+  
+  # empirical 
+  geom_vline(data = lifetimes.empirical %>% filter(died == 1),
+             aes(xintercept = max(lifetime)),
+             color = "black",
+             linewidth = 1.25) +
+  
+  # axis titles
+  xlab("Max lifetime")
