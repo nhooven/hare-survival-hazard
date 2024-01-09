@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
 # Date completed: 29 Dec 2023
-# Date last modified: 08 Jan 2024
+# Date last modified: 09 Jan 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -33,7 +33,7 @@ fates.1 <- fates %>% dplyr::select(cluster,
                                    Mass.1,
                                    HFL.1,
                                    PC1,
-                                   BCI,
+                                   BCI.1,
                                    Treatment.Retention,
                                    Treatment.Piling)
 
