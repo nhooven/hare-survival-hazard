@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 05 Jan 2024
 # Date completed: 
-# Date last modified: 09 Jan 2024
+# Date last modified: 10 Jan 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -327,12 +327,12 @@ ggplot() +
   theme_bw() +
   
   # simulated distributions
-  geom_density(data = lifetimes.all %>% filter(died == 1),
+  geom_line(data = lifetimes.all %>% filter(died == 1),
                aes(x = lifetime,
                    group = draw),
+               stat = "density",
                color = "#33CCCC",
-               fill = NA,
-               alpha = 0.25) +
+               alpha = 0.35) +
   
   # empirical distribution
   geom_density(data = lifetimes.empirical %>% filter(died == 1),
