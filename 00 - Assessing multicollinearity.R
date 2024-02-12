@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 08 Jan 2024
 # Date completed: 08 Jan 2024
-# Date last modified: 08 Jan 2024
+# Date last modified: 12 Feb 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -18,20 +18,7 @@ library(tidyverse)       # manipulate and clean data
 # 2. Read in and format data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("fates_cleaned.csv")
-
-# keep only columns we need for modeling
-fates.1 <- fates %>% dplyr::select(cluster,
-                                   Site,
-                                   Ear.tag,
-                                   Collar.type,
-                                   week,
-                                   status.num,
-                                   Sex.1,
-                                   Mass.1,
-                                   HFL.1,
-                                   Treatment.Retention,
-                                   Treatment.Piling)
+fates <- read.csv("Cleaned data/fates_cleaned_02_12_2024.csv")
 
 #_______________________________________________________________________________________________
 # 3. Examine potential multicollinearity ----
@@ -44,7 +31,7 @@ ggplot() +
   theme_bw() +
   
   # points per sex
-  geom_point(data = fates.1,
+  geom_point(data = fates,
              aes(x = HFL.1,
                  y = Mass.1,
                  color = as.factor(Sex.1),
@@ -62,7 +49,7 @@ ggplot() +
   
   # sex-specific regressions
   # female
-  geom_smooth(data = fates.1 %>% filter(Sex.1 == 0),
+  geom_smooth(data = fates %>% filter(Sex.1 == 0),
               aes(x = HFL.1,
                   y = Mass.1),
               method = "lm",
@@ -71,7 +58,7 @@ ggplot() +
               alpha = 0.25) +
   
   # male
-  geom_smooth(data = fates.1 %>% filter(Sex.1 == 1),
+  geom_smooth(data = fates %>% filter(Sex.1 == 1),
               aes(x = HFL.1,
                   y = Mass.1),
               method = "lm",
@@ -82,7 +69,7 @@ ggplot() +
 # here the female intercept and slope is higher
 
 # let's run the regression out of curiosity
-sex.reg <- lm(data = fates.1,
+sex.reg <- lm(data = fates,
               Mass.1 ~ Sex.1 + HFL.1)
 
 summary(sex.reg)
@@ -90,35 +77,33 @@ summary(sex.reg)
 # this is pretty convincing evidence that sex and HFL can reliably predict 
 # trends in mass
 
-
-
 # correlation between covariates
 # mass and HFL
-cor.test(x = fates.1$Mass.1, 
-         y = fates.1$HFL.1,
+cor.test(x = fates$Mass.1, 
+         y = fates$HFL.1,
          method = "pearson")
 
-# this is a pretty strong correlation
+# this is a somewhat strong correlation
 
 # mass and sex
-cor.test(x = fates.1$Mass.1, 
-         y = fates.1$Sex.1,
+cor.test(x = fates$Mass.1, 
+         y = fates$Sex.1,
          method = "pearson")
 
-# slightly weaker, but still substantial
+# slightly weaker
 
 # hfl and sex
-cor.test(x = fates.1$HFL.1, 
-         y = fates.1$Sex.1,
+cor.test(x = fates$HFL.1, 
+         y = fates$Sex.1,
          method = "pearson")
 
-# even weaker, but somewhat related
+# very weak
 
 
 
 # variance inflation factors (general Poisson regression)
 vif.model <- glm(status.num ~ Sex.1 + Treatment.Retention + Treatment.Piling + Mass.1 + HFL.1,
-                 data = fates.1,
+                 data = fates,
                  family = poisson)
 
 car::vif(vif.model)
@@ -130,9 +115,7 @@ car::vif(vif.model)
 #_______________________________________________________________________________________________
 
 # since both variables are z-score standardized, it is trivial to compute the first PC
-fates.2 <- fates.1 %>% mutate(PC1 = (Mass.1 + HFL.1) / 2)
-
-cor(x = fates.2[ ,c("Mass.1", "HFL.1", "Sex.1", "PC1")], 
+cor(x = fates[ ,c("Mass.1", "HFL.1", "Sex.1", "PC1")], 
     method = "pearson")
 
 # here each variable is correlated the same to the first PC
@@ -146,10 +129,8 @@ cor(x = fates.2[ ,c("Mass.1", "HFL.1", "Sex.1", "PC1")],
 
 #_______________________________________________________________________________________________
 
-fates.2$BCI <- fates.2$Mass.1 / fates.2$HFL.1
-
 # examine correlations
-cor(x = fates.2[ ,c("Mass.1", "HFL.1", "Sex.1", "PC1", "BCI")], 
+cor(x = fates[ ,c("Mass.1", "HFL.1", "Sex.1", "PC1", "BCI")], 
     method = "pearson")
 
 # TENTATIVE CONCLUSIONS

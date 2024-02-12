@@ -1,11 +1,11 @@
 # Project: WSU Snowshoe Hare and PCT Project
 # Subproject: Survival and hazard modeling
-# Script: 01a - Merge fates & covariate data
+# Script: 01 - Merge fates & covariate data
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 09 Feb 2024 
+# Date last modified: 12 Feb 2024 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -152,9 +152,7 @@ fates.3 <- fates.2 %>%
                               2023))) %>%
   
   # remove event type and start/end variables
-  dplyr::select(-c(Event.type,
-                   start,
-                   end))
+  dplyr::select(-c(Event.type))
 
 #_______________________________________________________________________________________________
 # 6. Attribute covariate values to each individual/week observation ----
@@ -325,6 +323,9 @@ for (i in unique(covs.2$Animal.ID)) {
 # drop "days" column
 covs.3 <- covs.3 %>% dplyr::select(-days)
 
+# add numeric measurement day
+covs.4 <- covs.3 %>% mutate(measure.date = as.numeric(Date) - date.origin)
+
 #_______________________________________________________________________________________________
 # 6d. Attribute covariates to all observations ----
 #_______________________________________________________________________________________________
@@ -332,7 +333,7 @@ covs.3 <- covs.3 %>% dplyr::select(-days)
 # remove any observations without Animal.IDs
 fates.3 <- fates.3 %>% filter(Animal.ID != "")
 
-# loop through all observations and attribute values from covs.1
+# loop through all observations and attribute values from covs.3
 fates.4 <- data.frame()
 
 for (i in unique(fates.3$Animal.ID)) {
@@ -341,32 +342,113 @@ for (i in unique(fates.3$Animal.ID)) {
   focal.id <- fates.3 %>% filter(Animal.ID == i)
   
   # subset covariate data
-  focal.covs <- covs.2 %>% filter(Animal.ID == i) %>%
+  focal.covs <- covs.4 %>% filter(Animal.ID == i) %>%
     
     # ensure that this is arranged by date
     arrange(Date)
   
   # FOR NOW - assume the sex recorded in "fates" matches those in "covs"
   
-  # fill in NAs
-  # mass - any body mass < 0.8 kg should not have received a collar, so if a previous
-  # handling occasion has a mass < than this cutoff, use a population mean (by sex)
-  
-  # nested loop to examine all Final.mass cells with NAs
-  for (j in 1:nrow(focal.covs)) {
+  # attribute closest mass and HFL records to focal.id
+  for (j in 1:nrow(focal.id)) {
     
-    focal.covs$Final.mass[j]
+    focal.id$Mass[j] <- focal.covs$Final.mass[which.min(abs(focal.id$start[j] - focal.covs$measure.date))] 
     
-    # examine first entry
-    if (focal.covs)
-    
-    if (focal.covs$Final.mass[j] >= 0.8) {
-      
-      
-      
-    }
+    focal.id$HFL[j] <- focal.covs$HFL[which.min(abs(focal.id$start[j] - focal.covs$measure.date))] 
     
   }
   
+  # bind to master df
+  fates.4 <- rbind(focal.id, fates.4)
   
 }
+
+# remove "start" and "end"
+fates.5 <- fates.4 %>% dplyr::select(-c(start, end))
+
+#_______________________________________________________________________________________________
+# 7. Standardize and format covariates ----
+#_______________________________________________________________________________________________
+
+# use an indicator variable for sex (0 = F [intercept])
+fates.5$Sex.1 <- ifelse(fates.5$Sex == "F",
+                        0,
+                        1)
+
+fates.5$Mass.1 <- as.numeric(scale(fates.5$Mass))
+
+fates.5$HFL.1 <- as.numeric(scale(fates.5$HFL))
+
+#_______________________________________________________________________________________________
+# 8. Add treatment variable ----
+#_______________________________________________________________________________________________
+
+# here, we will use two indicator variables to estimate the effect of each treatment
+# compared to control (i.e., the intercept)
+
+# week 40 for 2A, 2B, 3A, and 3B
+# week 41 for 1A, 1B, 4A, and 4B
+
+fates.5$Treatment.Retention <- NA
+fates.5$Treatment.Piling <- NA
+
+# controls
+fates.5$Treatment.Retention[fates.5$Site %in% c("1C", "2C", "3C", "4C")] <- 0
+fates.5$Treatment.Piling[fates.5$Site %in% c("1C", "2C", "3C", "4C")] <- 0
+
+# treatments in 2022 (akin to controls)
+fates.5$Treatment.Retention[fates.5$Site %in% c("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B") &
+                              fates.5$year == 2022] <- 0
+fates.5$Treatment.Piling[fates.5$Site %in% c("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B") &
+                           fates.5$year == 2022] <- 0
+
+# 2 and 3 before week 40, 2023
+fates.5$Treatment.Retention[fates.5$Site %in% c("2A", "2B", "3A", "3B") &
+                              fates.5$week < 40 &
+                              fates.5$year == 2023] <- 0
+fates.5$Treatment.Piling[fates.5$Site %in% c("2A", "2B", "3A", "3B") &
+                           fates.5$week < 40 &
+                           fates.5$year == 2023] <- 0
+
+# 1 and 4 before week 41, 2023
+fates.5$Treatment.Retention[fates.5$Site %in% c("1A", "1B", "4A", "4B") &
+                              fates.5$week < 41 &
+                              fates.5$year == 2023] <- 0
+fates.5$Treatment.Piling[fates.5$Site %in% c("1A", "1B", "4A", "4B") &
+                           fates.5$week < 41 &
+                           fates.5$year == 2023] <- 0
+
+# rest of NAs for retention units
+fates.5$Treatment.Retention[is.na(fates.5$Treatment.Retention) &
+                              fates.5$Site %in% c("1A", "2B", "3B", "4A")] <- 1
+fates.5$Treatment.Piling[is.na(fates.5$Treatment.Piling) &
+                           fates.5$Site %in% c("1A", "2B", "3B", "4A")] <- 0
+
+# rest of NAs for piling units
+fates.5$Treatment.Retention[is.na(fates.5$Treatment.Retention) &
+                              fates.5$Site %in% c("1B", "2A", "3A", "4B")] <- 0
+fates.5$Treatment.Piling[is.na(fates.5$Treatment.Piling) &
+                           fates.5$Site %in% c("1B", "2A", "3A", "4B")] <- 1
+
+#_______________________________________________________________________________________________
+# 9. Add cluster variable (will be an index) ----
+#_______________________________________________________________________________________________
+
+fates.5$cluster <- as.numeric(substr(fates.5$Site, 1, 1))
+
+#_______________________________________________________________________________________________
+# 10. Add principle component "body size" and body condition index ----
+#_______________________________________________________________________________________________
+
+# calculate first principal component axis
+fates.5$PC1 <- (fates.5$Mass.1 + fates.5$HFL.1) / 2
+
+# divide mass by HFL to create a body condition index uncorrelated with either variable
+fates.5$BCI <- fates.5$Mass.1 / fates.5$HFL.1
+fates.5$BCI.1 <- scale(fates.5$BCI)
+
+#_______________________________________________________________________________________________
+# 11. Write to csv ----
+#_______________________________________________________________________________________________
+
+write.csv(fates.5, "Cleaned data/fates_cleaned_02_12_2024.csv")
