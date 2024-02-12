@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 29 Dec 2023
 # Date completed: 
-# Date last modified: 09 Jan 2024
+# Date last modified: 12 Feb 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -21,14 +21,14 @@ library(ggridges)        # ridgeline plot
 # 2. Read in data ----
 #_______________________________________________________________________________________________
 
-load("poisson_model.RData")
+load("RData - final/poisson_model.RData")
 
 #_______________________________________________________________________________________________
 # 3. Extract parameter estimates ----
 #_______________________________________________________________________________________________
 
 # extract draws
-model.draws <- as.data.frame(rstan::extract(m5))
+model.draws <- as.data.frame(rstan::extract(m6))
 
 #_______________________________________________________________________________________________
 # 4. Visualize time-varying baseline hazard function ----
@@ -237,12 +237,19 @@ pil.ci <- data.frame(med = median(covariate.draws$hr_pil),
                      up.2 = quantile(covariate.draws$hr_pil, prob = 0.75),
                      var = "piling")
 
-bsz.ci <- data.frame(med = median(covariate.draws$hr_bsz),
-                     lo.1 = quantile(covariate.draws$hr_bsz, prob = 0.025),
-                     up.1 = quantile(covariate.draws$hr_bsz, prob = 0.975),
-                     lo.2 = quantile(covariate.draws$hr_bsz, prob = 0.25),
-                     up.2 = quantile(covariate.draws$hr_bsz, prob = 0.75),
-                     var = "body size")
+mas.ci <- data.frame(med = median(covariate.draws$hr_mas),
+                     lo.1 = quantile(covariate.draws$hr_mas, prob = 0.025),
+                     up.1 = quantile(covariate.draws$hr_mas, prob = 0.975),
+                     lo.2 = quantile(covariate.draws$hr_mas, prob = 0.25),
+                     up.2 = quantile(covariate.draws$hr_mas, prob = 0.75),
+                     var = "mass")
+
+hfl.ci <- data.frame(med = median(covariate.draws$hr_hfl),
+                     lo.1 = quantile(covariate.draws$hr_hfl, prob = 0.025),
+                     up.1 = quantile(covariate.draws$hr_hfl, prob = 0.975),
+                     lo.2 = quantile(covariate.draws$hr_hfl, prob = 0.25),
+                     up.2 = quantile(covariate.draws$hr_hfl, prob = 0.75),
+                     var = "hfl")
 
 bci.ci <- data.frame(med = median(covariate.draws$hr_bci),
                      lo.1 = quantile(covariate.draws$hr_bci, prob = 0.025),
@@ -252,7 +259,7 @@ bci.ci <- data.frame(med = median(covariate.draws$hr_bci),
                      var = "body condition index")
 
 # bind together
-all.ci <- bind_rows(sex.ci, ret.ci, pil.ci, bsz.ci, bci.ci)
+all.ci <- bind_rows(sex.ci, ret.ci, pil.ci, mas.ci, hfl.ci, bci.ci)
 
 # plot
 ggplot(data = all.ci,
@@ -280,12 +287,16 @@ ggplot(data = all.ci,
                      y = var),
                  height = 0,
                  linewidth = 2,
-                 color = "gray") +
+                 color = "darkgray") +
   
   # points
   geom_point(aes(x = med,
                  y = var),
-             size = 2.5) +
+             shape = 21,
+             color = "black",
+             fill = "white",
+             size = 2.5,
+             stroke = 1.1) +
   
   # axis titles
   xlab("Hazard ratio") +
@@ -319,3 +330,7 @@ all.ci <- all.ci %>%
                     v))
 
 all.ci
+
+#_______________________________________________________________________________________________
+# 6. Visualize survivorship curves ----
+#_______________________________________________________________________________________________
