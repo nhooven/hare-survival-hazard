@@ -171,6 +171,24 @@ ggplot() +
                 y = `50%`),     
             linewidth = 1.25) +
   
+  # theme arguments
+  theme(panel.grid = element_blank(),
+        legend.position = "none") +
+  
+  # scale x axis by month
+  scale_x_continuous(breaks = c(0, 4, 8, 12,
+                                16, 20, 24, 28, 32, 
+                                36, 40, 44, 48)) +
+  
+  # lines at the equinoxes and solstices
+  geom_vline(xintercept = c(12, 25.5, 38.5, 51.5),
+             alpha = 0.10,
+             linewidth = 1.25,
+             linetype = "dashed") +
+  
+  # coordinates
+  coord_cartesian(xlim = c(3.5, 49.7)) +
+  
   # axis labels
   ylab("Baseline hazard") +
   xlab("Week of year")
