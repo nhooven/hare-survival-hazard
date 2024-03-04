@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
 # Date completed: 29 Dec 2023
-# Date last modified: 01 Mar 2024
+# Date last modified: 04 Mar 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -20,7 +20,7 @@ library(splines)         # construct basic functions
 # 2. Read in and format data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Cleaned data/fates_cleaned_02_12_2024.csv")
+fates <- read.csv("Cleaned data/fates_cleaned_03_04_2024.csv")
 
 # keep only columns we need for modeling
 fates.1 <- fates %>% dplyr::select(cluster,

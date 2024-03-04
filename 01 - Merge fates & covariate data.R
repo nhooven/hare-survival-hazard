@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 12 Feb 2024 
+# Date last modified: 04 Mar 2024 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -20,11 +20,11 @@ library(survival)        # survsplit function
 # 2. Read in data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Raw data/fates_02_09_2024.csv")
+fates <- read.csv("Raw data/fates_03_04_2024.csv")
 covs <- read.csv("Raw data/covariates_02_09_2024.csv")
 
 # define cutoff date
-cutoff <- as.Date("2024-01-31", tz = "America/Los_Angeles")
+cutoff <- as.Date("2024-02-29", tz = "America/Los_Angeles")
 
 #_______________________________________________________________________________________________
 # 3. Keep relevant columns ----
@@ -437,7 +437,7 @@ fates.5$Treatment.Piling[is.na(fates.5$Treatment.Piling) &
 fates.5$cluster <- as.numeric(substr(fates.5$Site, 1, 1))
 
 #_______________________________________________________________________________________________
-# 10. Add principle component "body size" and body condition index ----
+# 10. Add principal component "body size" and body condition index ----
 #_______________________________________________________________________________________________
 
 # calculate first principal component axis
@@ -451,4 +451,4 @@ fates.5$BCI.1 <- scale(fates.5$BCI)
 # 11. Write to csv ----
 #_______________________________________________________________________________________________
 
-write.csv(fates.5, "Cleaned data/fates_cleaned_02_12_2024.csv")
+write.csv(fates.5, "Cleaned data/fates_cleaned_03_04_2024.csv")
