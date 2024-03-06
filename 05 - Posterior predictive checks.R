@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 05 Jan 2024
 # Date completed: 
-# Date last modified: 10 Jan 2024
+# Date last modified: 06 Mar 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -20,16 +20,14 @@ library(splines)
 # 2. Read in data ----
 #_______________________________________________________________________________________________
 
-load("poisson_model.RData")
-
-fates <- read.csv("fates_cleaned_2.csv")
+load("RData - final/poisson_model.RData")
 
 #_______________________________________________________________________________________________
 # 3. Extract parameter estimates ----
 #_______________________________________________________________________________________________
 
 # extract draws
-model.draws <- as.data.frame(rstan::extract(m5))
+model.draws <- as.data.frame(rstan::extract(m7))
 
 #_______________________________________________________________________________________________
 # 4. Distributions of lifetimes (in weeks) ----
@@ -55,7 +53,8 @@ for (i in 1:length(unique(fates.1$Ear.tag))) {
                                              1,
                                              0),
                                sex = focal.df$Sex.1[1],
-                               bsz = focal.df$PC1[1],
+                               mas = focal.df$Mass.1[1],
+                               hfl = focal.df$HFL.1[1],
                                bci = focal.df$BCI.1[1],
                                ret = focal.df$Treatment.Retention[1],
                                pil = focal.df$Treatment.Piling[1])
@@ -86,14 +85,14 @@ ggplot(lifetimes.empirical,
 
 # lifetimes related to mass
 ggplot(lifetimes.empirical %>% filter(died == 1),
-       aes(x = mass,
+       aes(x = mas,
            y = lifetime)) +
   
   theme_bw() +
   
   geom_point()
 
-# enter times (we'll draw the enter times from the simulation from this distribution)
+# enter times 
 ggplot(lifetimes.empirical,
        aes(x = enter)) +
   
@@ -175,9 +174,9 @@ pred.df <- data.frame(id = 1:n.obs)
 set.seed(1234)
 
 # use the entire empirical dataset
-pred.df.1 <-lifetimes.empirical %>% dplyr::select(-exit,
-                                                  -lifetime,
-                                                  -died)
+pred.df.1 <- lifetimes.empirical %>% dplyr::select(-exit,
+                                                   -lifetime,
+                                                   -died)
 
 # and construct the basis functions for the spline on hazard
 # let's create a prediction df first
