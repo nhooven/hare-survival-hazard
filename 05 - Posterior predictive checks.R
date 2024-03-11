@@ -4,8 +4,8 @@
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 05 Jan 2024
-# Date completed: 
-# Date last modified: 06 Mar 2024
+# Date completed: 11 Mar 2024
+# Date last modified: 11 Mar 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -121,323 +121,217 @@ censor.prob
 # 08 Jan 2024 UPDATE:
 # It seems this crude approximation of the censoring rate is too low- 
 # the posterior predictive simulations extend the average lifetime too long
-# I suspect that this is because of multicollinearity in the data-
-# specifically the correlations between sex and morphometry.
-# The predictive dataset I used assumes independence between sex, mass, and HFL
 
 #_______________________________________________________________________________________________
-# 4b. Simulate distributions of individuals from the posterior ----
+# 5. Simulate lifetimes from the model ----
+#_______________________________________________________________________________________________
 
-# define function that starts counting from 1 again at the final step (typically week 52)
-recycle.time <- function(enter = 1,
-                         max = n.steps) {
+# we'll use empirical starting points and time-varying covariates from observations
+
+# create blank "fates" datasets
+blank.fates <- data.frame()
+
+for (i in 1:length(unique(fates.1$Ear.tag))) {
   
-  # define vector of length n.steps to hold 
-  vec <- vector(mode = "integer", length = n.steps)
+  # subset
+  focal.indiv <- unique(fates.1$Ear.tag)[i]
   
-  # add enter time
-  vec[1] <- enter
+  focal.df <- fates.1 %>% filter(Ear.tag == focal.indiv)
   
-  # add 1
-  for (i in 1:length(vec)) {
-    
-    # don't change the 1st entry
-    if (i > 1) {
-      
-      # add one to all places to the right of the entry
-      vec[i] <- vec[i - 1] + 1
-      
-      # subtract the n.steps from anything greater than n.steps
-      vec[i] <- ifelse(vec[i] > n.steps,
-                       vec[i] - n.steps,
-                       vec[i])
-      
-    }
-    
-  }
+  # add rows to total to 78 (a year and a half, for buffering purposes)
+  # how many rows to add?
+  n.rows.add <- 78 - nrow(focal.df)
   
-  return(vec)
+  # weeks recycling
+  max.week <- focal.df$week[nrow(focal.df)]
+  weeks <- (max.week + 1):((max.week + 1) + n.rows.add - 1)
+  weeks.1 <- ifelse(weeks > 52 & weeks <= 104,
+                    weeks - 52,
+                    ifelse(weeks > 104,
+                           weeks - 104,
+                           weeks))
+  
+  # create df to bind (propagate final value)
+  add.df <- data.frame(cluster = focal.df$cluster[nrow(focal.df)],
+                       Site = focal.df$Site[nrow(focal.df)],
+                       Ear.tag = focal.df$Ear.tag[nrow(focal.df)],
+                       Collar.type = focal.df$Collar.type[nrow(focal.df)],
+                       week = weeks.1,
+                       year = NA,
+                       status.num = NA,
+                       Sex.1 = focal.df$Sex.1[nrow(focal.df)],
+                       Mass.1 = focal.df$Mass.1[nrow(focal.df)],
+                       HFL.1 = focal.df$HFL.1[nrow(focal.df)],
+                       PC1 = focal.df$PC1[nrow(focal.df)],
+                       BCI.1 = focal.df$BCI.1[nrow(focal.df)],
+                       Treatment.Retention = focal.df$Treatment.Retention[nrow(focal.df)],
+                       Treatment.Piling = focal.df$Treatment.Piling[nrow(focal.df)])
+  
+  # bind together
+  focal.df.1 <- rbind(focal.df,
+                      add.df)
+  
+  # remove status.num column
+  focal.df.1 <- focal.df.1 %>% dplyr::select(-status.num)
+  
+  # bind into master df
+  blank.fates <- rbind(blank.fates, focal.df.1)
   
 }
 
-#_______________________________________________________________________________________________
+# simulate survival times using the survival function
+# basis functions
+knot.list <- quantile(fates.1$week, 
+                      probs = seq(from = 0, 
+                                  to = 1, 
+                                  length.out = 5))
 
-# number of simulations, individuals, and simulation timesteps
-n.sim <- 50
-n.obs <- 200
-n.steps <- 52
-
-# let's create a prediction df first
-pred.df <- data.frame(id = 1:n.obs)
-
-# now let's draw enter times and covariate values from empirical distributions
-set.seed(1234)
-
-# use the entire empirical dataset
-pred.df.1 <- lifetimes.empirical %>% dplyr::select(-exit,
-                                                   -lifetime,
-                                                   -died)
-
-# and construct the basis functions for the spline on hazard
-# let's create a prediction df first
-weeks.pred <- seq(1, 52)                 # weekly predictions
-
-basis.pred <- bs(weeks.pred,       
+basis.pred <- bs(1:52,       
                  knots = knot.list[-c(1, n.knots)],          
                  degree = 3,                     
                  intercept = FALSE)
 
-# draw from posterior samples
-sample.draws <- model.draws[sample(x = nrow(model.draws),
-                            size = n.sim,
-                            replace = TRUE), ]
+# dataset of expected hazard rates for each individual-week combination
 
-# nested loop (draw, observation, follow-up)
-lifetimes.all <- data.frame()
+# HERE IT MIGHT BE WORTHWHILE TO SUBSAMPLE THE POSTERIOR DRAWS TO SOMETHING EASIER TO
+# WORK WITH, SO I CAN RUN THROUGH THE WHOLE PROCESS TO SEE IF IT WORKS
+model.draws.sample <- model.draws %>%
+  
+  slice(sample(1:4000,
+               size = 1000))
 
+all.draws.indivs <- data.frame()
+
+# time it
 start.time <- Sys.time()
 
-for (i in 1:n.sim) {
+# loop
+for (i in 1:nrow(model.draws.sample)) {
   
-  # focal draw (drawn with replacement)
-  focal.draw <- sample.draws %>% slice(i)
+  focal.draw <- model.draws.sample[i, ]
   
-  # inner loop, by observation
-  for (j in 1:nrow(pred.df.1)) {
+  # h0(t) (baseline hazard - spline)
+  # spline weights
+  w0 <- t(as.matrix(as.numeric(focal.draw[ , 7:12])))
+  
+  # multiply with 'sweep'
+  w0.by.b <- sweep(basis.pred, 2, w0, `*`)
+  
+  # sum to create "normal" scale spline prediction
+  w0.by.b.sum <- apply(w0.by.b, 1, sum)
+  
+  # calculate for every observation
+  blank.fates.1 <- 
     
-    # subset
-    focal.df <- pred.df.1 %>% slice(j)
+    mutate(blank.fates, 
+           
+           lambda = 
+             
+             # calculate total expected hazard
+             as.numeric(exp((
+               
+               # base intercept
+               focal.draw$a0 + 
+                 
+                 # standard deviation
+                 focal.draw$sigma * 
+                 
+                 # non-centered random intercept term
+                 focal.draw[2:5][blank.fates$cluster]) + 
+                 
+                 # extract correct weekly hazard ("normal" scale)
+                 w0.by.b.sum[blank.fates$week])) * 
+             
+             # covariate effects 
+             exp(blank.fates$Sex.1 * focal.draw$b_sex +
+                   blank.fates$Mass.1 * focal.draw$b_mas +
+                   blank.fates$HFL.1 * focal.draw$b_hfl +
+                   blank.fates$BCI.1 * focal.draw$b_bci +
+                   blank.fates$Treatment.Retention * focal.draw$b_ret +
+                   blank.fates$Treatment.Piling * focal.draw$b_pil),
+           
+           # add draw number
+           draw = i)
+  
+  # calculate cumulative hazard, survival, and fit function
+  # nested loop (by individual)
+  all.indivs <- data.frame()
+  
+  for (j in 1:length(unique(blank.fates.1$Ear.tag))) {
     
-    # expand df to an entire year
-    focal.df.1 <- data.frame(row = 1:n.steps)
+    focal.indiv <- unique(blank.fates.1$Ear.tag)[j]
     
-    # fill other columns
-    focal.df.1 <- focal.df.1 %>% 
-      
-      mutate(id = focal.df$indiv,
-             week = recycle.time(focal.df$enter, n.steps),
-             sex = focal.df$sex,
-             bsz = focal.df$bsz,
-             bci = focal.df$bci,
-             ret = focal.df$ret,
-             pil = focal.df$pil)
+    focal.indiv.df <- blank.fates.1 %>% filter(Ear.tag == focal.indiv)
     
-    # calculate predicted lambda
-    # h0(t) (baseline hazard - spline)
-    # spline weights
-    w0 <- t(as.matrix(as.numeric(focal.draw[ , 2:7])))
+    # add cumulative sum
+    focal.indiv.df <- focal.indiv.df %>% 
+      
+      mutate(cumul.haz = cumsum(lambda)) %>%
+      
+      # convert to cumulative survival and add sequential week
+      mutate(cumul.surv = exp(-cumul.haz),
+             seq.week = as.numeric(rownames(focal.indiv.df)))
     
-    # multiply with 'sweep'
-    w0.by.b <- sweep(basis.pred, 2, w0, `*`)
+    # fit smooth function to cumulative survival curve
+    surv.spline <- lm(data = focal.indiv.df,
+                      formula = cumul.surv ~ bs(x = seq.week,
+                                                df = 10))      # this provides decent flexibility
     
-    # sum to create "normal" scale spline prediction
-    w0.by.b.sum <- apply(w0.by.b, 1, sum)
+    # sample from a uniform distribution, snap to nearest predicted y/extract the x
+    sampled.y <- runif(n = 1, 
+                       min(predict(surv.spline)), 
+                       max(predict(surv.spline)))
     
-    # join the baseline hazard prediction
-    focal.df.2 <- focal.df.1 %>% 
-      
-      left_join(data.frame(week = 1:nrow(basis.pred),
-                           h0 = exp(focal.draw$a0 + w0.by.b.sum)),
-                by = join_by(week)) %>%
-      
-      # and calculate the lambda (total hazard)
-      mutate(lambda = h0 * exp(focal.draw$b_sex * sex +
-                               focal.draw$b_bsz * bsz +
-                               focal.draw$b_bci * bci +
-                               focal.draw$b_ret * ret +
-                               focal.draw$b_pil * pil)) %>%
-      
-      # calculate the survival probability
-      mutate(s = exp(-lambda)) %>%
-      
-      # and draw from Bernoulli trials using survival and censoring probs
-      mutate(y = rbinom(nrow(focal.df.1), 1, p = 1 - s),
-             y.cens = rbinom(nrow(focal.df.1), 1, p = 1 - censor.prob))
+    snap <- as.integer(which.min(abs(predict(surv.spline) - sampled.y)))
     
-    # determine which comes first (if either) - death or censoring
-    # case: neither event occurred
-    if (sum(focal.df.2$y) == 0 & sum(focal.df.2$y.cens) == 0) {
+    # bind into data frame with characteristics of first observation
+    focal.indiv.df.1 <- focal.indiv.df %>%
       
-      focal.lifetime <- nrow(focal.df.2)
-      focal.died <- 0
+      # slice the first row
+      slice(1) %>%
       
-    } 
+      # keep only columns we need
+      dplyr::select(-c(lambda,
+                       cumul.haz,
+                       cumul.surv,
+                       seq.week)) %>%
+      
+      # add in lifetime (in weeks)
+      mutate(lifetime = snap)
     
-    # case: death occurred, censoring did not
-    if (sum(focal.df.2$y) > 0 & sum(focal.df.2$y.cens) == 0) {
-      
-      focal.lifetime <- which(focal.df.2$y == 1)[1]
-      focal.died <- 1
-      
-    } 
-    
-    # case: death did not occur, censoring did 
-    if (sum(focal.df.2$y) == 0 & sum(focal.df.2$y.cens) > 0) {
-      
-      focal.lifetime <- which(focal.df.2$y.cens == 1)[1]
-      focal.died <- 0
-      
-    } 
-    
-    # case: death and censoring occurred
-    if (sum(focal.df.2$y) > 0 & sum(focal.df.2$y.cens) > 0) {
-      
-      # did death happen first?
-      which.first <- which(focal.df.2$y == 1)[1] < which(focal.df.2$y.cens == 1)[1]
-      
-      focal.lifetime <- ifelse(isTRUE(which.first),
-                               which(focal.df.2$y == 1)[1],
-                               which(focal.df.2$y.cens == 1)[1])
-      
-      focal.died <- ifelse(isTRUE(which.first),
-                           1,
-                           0)
-      
-    } 
-    
-    # bind into lifetime df
-    focal.lifetime <- data.frame(draw = i,
-                                 id = focal.df$indiv,
-                                 lifetime = focal.lifetime,
-                                 died = focal.died)
-    
-    lifetimes.all <- rbind(lifetimes.all, focal.lifetime)
+    # bind into sub-master df
+    all.indivs <- rbind(all.indivs, focal.indiv.df.1)
     
   }
   
+  # bind into master df
+  all.draws.indivs <- rbind(all.draws.indivs, all.indivs)
+  
 }
 
-# time
+# end time
 Sys.time() - start.time
 
-# simulation time: 21.57 mins
-  # n.sim = 50
-  # n.obs = 200
-  # n.steps = 52
-
-#_______________________________________________________________________________________________
-# 4c. Examine empirical vs. simulated lifetime distributions ----
-#_______________________________________________________________________________________________
-# 4ci. Distributions ----
-#_______________________________________________________________________________________________
-
-ggplot() +
+# plot
+ggplot(data = all.draws.indivs) +
   
-  theme_bw() +
+  theme_classic() +
   
-  # simulated distributions
-  geom_line(data = lifetimes.all %>% filter(died == 1),
-               aes(x = lifetime,
-                   group = draw),
-               stat = "density",
-               color = "#33CCCC",
-               alpha = 0.35) +
+  geom_line(aes(x = lifetime,
+                group = draw),
+            stat = "density",
+            color = "#33CCCC",
+            alpha = 0.15) +
   
   # empirical distribution
-  geom_density(data = lifetimes.empirical %>% filter(died == 1),
+  geom_density(data = lifetimes.empirical,
                aes(x = lifetime),
                color = "black",
                fill = NA,
                linewidth = 1.15)
 
-#_______________________________________________________________________________________________
-# 4cii. Mean ----
-#_______________________________________________________________________________________________
+# this is clearly leading to FAR too many individuals surviving a long time,
+# especially > 30 weeks
+# we must incorporate the censoring process here!
+# either in the model (eventually), or in the data thinning here
 
-ggplot() +
-  
-  theme_bw() +
-  
-  # simulated 
-  geom_histogram(data = lifetimes.all %>% filter(died == 1) %>%
-                                        group_by(draw) %>%
-                                        summarize(mean = mean(lifetime)),
-               aes(x = mean),
-               fill = "#33CCCC") +
-  
-  # empirical 
-  geom_vline(data = lifetimes.empirical %>% filter(died == 1),
-               aes(xintercept = mean(lifetime)),
-               color = "black",
-             linewidth = 1.25) +
-  
-  # axis titles
-  xlab("Mean lifetime")
-
-#_______________________________________________________________________________________________
-# 4ciii. SD ----
-#_______________________________________________________________________________________________
-
-ggplot() +
-  
-  theme_bw() +
-  
-  # simulated 
-  geom_histogram(data = lifetimes.all %>% filter(died == 1) %>%
-                   group_by(draw) %>%
-                   summarize(sd = sd(lifetime)),
-                 aes(x = sd),
-                 fill = "#33CCCC") +
-  
-  # empirical 
-  geom_vline(data = lifetimes.empirical %>% filter(died == 1),
-             aes(xintercept = sd(lifetime)),
-             color = "black",
-             linewidth = 1.25) +
-  
-  # axis titles
-  xlab("SD lifetime")
-
-#_______________________________________________________________________________________________
-# 4civ. Min ----
-#_______________________________________________________________________________________________
-
-ggplot() +
-  
-  theme_bw() +
-  
-  # simulated 
-  geom_histogram(data = lifetimes.all %>% filter(died == 1) %>%
-                                          group_by(draw) %>%
-                                          summarize(min = min(lifetime)),
-                 aes(x = min),
-                 fill = "#33CCCC") +
-  
-  # empirical 
-  geom_vline(data = lifetimes.empirical %>% filter(died == 1),
-             aes(xintercept = min(lifetime)),
-             color = "black",
-             linewidth = 1.25) +
-  
-  # axis titles
-  xlab("Min lifetime")
-
-#_______________________________________________________________________________________________
-# 4cv. Max ----
-#_______________________________________________________________________________________________
-
-ggplot() +
-  
-  theme_bw() +
-  
-  # simulated 
-  geom_histogram(data = lifetimes.all %>% filter(died == 1) %>%
-                   group_by(draw) %>%
-                   summarize(max = max(lifetime)),
-                 aes(x = max),
-                 fill = "#33CCCC") +
-  
-  # empirical 
-  geom_vline(data = lifetimes.empirical %>% filter(died == 1),
-             aes(xintercept = max(lifetime)),
-             color = "black",
-             linewidth = 1.25) +
-  
-  # axis titles
-  xlab("Max lifetime")
-
-#_______________________________________________________________________________________________
-# 5. Save image ----
-#_______________________________________________________________________________________________
-
-save.image("ppc_01_09_2024.RData")
