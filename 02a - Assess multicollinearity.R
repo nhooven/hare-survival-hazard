@@ -1,11 +1,11 @@
 # Project: WSU Snowshoe Hare and PCT Project
 # Subproject: Survival and hazard modeling
-# Script: 02b - Assessing multicollinearity
+# Script: 02a - Assess multicollinearity
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 08 Jan 2024
 # Date completed: 08 Jan 2024
-# Date last modified: 12 Feb 2024
+# Date last modified: 04 Apr 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -18,7 +18,7 @@ library(tidyverse)       # manipulate and clean data
 # 2. Read in and format data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Cleaned data/fates_cleaned_02_12_2024.csv")
+fates <- read.csv("Cleaned data/fates_cleaned_04_04_2024.csv")
 
 #_______________________________________________________________________________________________
 # 3. Examine potential multicollinearity ----

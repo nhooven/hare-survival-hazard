@@ -137,7 +137,7 @@ m2 <- rstan::stan(
   
   file = "m2.stan",
   data = fates.stan.1,
-  chains = 1,
+  chains = 4,
   warmup = 1000,
   iter = 2000
   
