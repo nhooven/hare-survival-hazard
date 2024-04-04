@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
 # Date completed: 29 Dec 2023
-# Date last modified: 04 Mar 2024
+# Date last modified: 04 Apr 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -20,23 +20,24 @@ library(splines)         # construct basic functions
 # 2. Read in and format data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Cleaned data/fates_cleaned_03_04_2024.csv")
+fates <- read.csv("Cleaned data/fates_cleaned_04_04_2024.csv")
 
 # keep only columns we need for modeling
 fates.1 <- fates %>% dplyr::select(cluster,
                                    Site,
                                    Ear.tag,
-                                   Collar.type,
                                    week,
                                    year,
-                                   status.num,
+                                   mort,
+                                   cens,
+                                   Collar.type.1,
                                    Sex.1,
                                    Mass.1,
                                    HFL.1,
                                    PC1,
                                    BCI.1,
-                                   Treatment.Retention,
-                                   Treatment.Piling)
+                                   trt.ret,
+                                   trt.pil)
 
 #_______________________________________________________________________________________________
 # 3. Construct basis functions for spline on hazard ----
@@ -70,7 +71,7 @@ basis.plot <- tibble(week = fates.1$week,
 
 ggplot(data = fates.1,
        aes(x = week,
-           y = status.num)) +
+           y = mort)) +
   theme_bw() +
   geom_jitter(alpha = 0.1,
               height = 0.01) +
@@ -83,403 +84,77 @@ ggplot(data = fates.1,
 
 num_basis <- ncol(basis)
 
-# add to new list
+#_______________________________________________________________________________________________
+# 4. Build data list ----
+#_______________________________________________________________________________________________
+
 fates.stan.1 <- list(N = nrow(fates.1),
-                     y = fates.1$status.num,
+                     y_mort = fates.1$mort,
+                     y_cens = fates.1$cens,
                      t = fates.1$week,
+                     collar = fates.1$Collar.type.1,
                      sex = fates.1$Sex.1,
                      mas = fates.1$Mass.1,
                      hfl = fates.1$HFL.1,
                      bsz = fates.1$PC1,
                      bci = fates.1$BCI,
-                     ret = fates.1$Treatment.Retention,
-                     pil = fates.1$Treatment.Piling,
+                     ret = fates.1$trt.ret,
+                     pil = fates.1$trt.pil,
                      clust = fates.1$cluster,
                      nclust = 4,
                      basis = basis,
                      num_basis = num_basis)
 
 #_______________________________________________________________________________________________
-# 4. M5 - Transformed covariate effects ----
+# 5. Run first model (random intercept for cluster) ----
 #_______________________________________________________________________________________________
 
-m5 <- rstan::stan(
+m1 <- rstan::stan(
   
-  model_code = "
-  
-  data {
-  
-  // number of observations
-  int N;                       // obs
-  int num_basis;               // basis functions
-  int nclust;                  // clusters
-  
-  // response variable (binary, 0-1)
-  int y[N];
-  
-  // time (required for estimating time-variant hazard);
-  // time in week of the year (1-52)
-  vector[N] t;       
-  
-  // spline matrix
-  matrix[N, num_basis] basis;
-  
-  // covariates (continuous)
-  real bsz[N];             // body size principal component (unitless) 
-  real bci[N];             // standardized body condition index (mass/hfl)
-  
-  // covariates (categorical)
-  int clust[N];            // index for cluster (1-4)
-  int sex[N];              // indicator for sex (0 = F, 1 = M)
-  int ret[N];              // indicator for retention
-  int pil[N];              // indicator for piling
-  
-  }
-  
-  parameters {
-  
-  real a0;                          // spline intercept
-  vector[num_basis] w0;             // weights
-  vector[nclust] c0;                // intercept by cluster
-  real b_sex;                       // slope for sex
-  real b_ret;                       // slope for retention
-  real b_pil;                       // slope for piling
-  real b_bsz;                       // slope for body size
-  real b_bci;                       // slope for body condition
-  
-  }
-  
-  model {
-  
-  // priors (these are on a normal scale)
-  // normal scale priors for spline parameters
-  w0 ~ normal(0, 1);                     // weights
-  a0 ~ normal(0, 1);                     // intercept
-  
-  // coefficients
-  c0[clust] ~ normal(0, 1);               // normal prior on c0
-  b_sex ~ normal(0, 2.5);                // normal prior on b_sex
-  b_ret ~ normal(0, 2.5);                // normal prior on b_ret
-  b_pil ~ normal(0, 2.5);                // normal prior on b_pil
-  b_bsz ~ normal(0, 2.5);                // normal prior on b_bsz
-  b_bci ~ normal(0, 2.5);                // normal prior on b_bci
-  
-  // model
-  // linear predictor
-  vector[N] bw;
-  vector[N] lambda;
-  
-  bw = to_vector(basis * w0);
-  
-  for (i in 1:N) {
-  
-  lambda[i] = exp(a0 + bw[i]) *
-  
-            exp(c0[clust[i]] +
-                b_sex * sex[i] + 
-                b_ret * ret[i] + 
-                b_pil * pil[i] +
-                b_bsz * bsz[i] +
-                b_bci * bci[i]);
-  
-  }
-  
-  y ~ poisson(lambda);
-  
-  }
-  
-  generated quantities {
-  
-  // hazard ratios
-  real hr_sex = exp(b_sex);
-  real hr_ret = exp(b_ret);
-  real hr_pil = exp(b_pil);
-  real hr_bsz = exp(b_bsz);
-  real hr_bci = exp(b_bci);
-  
-  }
-  
-  ",
-  
+  file = "m1.stan",
   data = fates.stan.1,
-  chains = 4,
+  chains = 1,
   warmup = 1000,
   iter = 2000
   
 )
 
-print(m5)
+print(m1)
 
 # estimates
-plot(m5, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_bsz", "hr_bci"))
-plot(m5, pars = c("c0[1]", "c0[2]", "c0[3]", "c0[4]"))
+plot(m1, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
+plot(m1, pars = c("a_c1", "a_c2", "a_c3", "a_c4"))
 
 # trace
-traceplot(m5, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_bsz", "hr_bci"))
-traceplot(m5, pars = c("c0[1]", "c0[2]", "c0[3]", "c0[4]"))
+traceplot(m1, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
+traceplot(m1, pars = c("a_c1", "a_c2", "a_c3", "a_c4"))
 
 #_______________________________________________________________________________________________
-# 5. M6 - Untransformed covariate effects (mass, hfl, and BCI) ----
+# 6. Run second model (censoring likelihood) ----
 #_______________________________________________________________________________________________
 
-m6 <- rstan::stan(
+m2 <- rstan::stan(
   
-  model_code = "
-  
-  data {
-  
-  // number of observations
-  int N;                       // obs
-  int num_basis;               // basis functions
-  int nclust;                  // clusters
-  
-  // response variable (binary, 0-1)
-  int y[N];
-  
-  // time (required for estimating time-variant hazard);
-  // time in week of the year (1-52)
-  vector[N] t;       
-  
-  // spline matrix
-  matrix[N, num_basis] basis;
-  
-  // covariates (continuous)
-  real mas[N];             // standardized mass (kg)
-  real hfl[N];             // standardized hfl (cm)
-  real bci[N];             // standardized body condition index (mass/hfl)
-  
-  // covariates (categorical)
-  int clust[N];            // index for cluster (1-4)
-  int sex[N];              // indicator for sex (0 = F, 1 = M)
-  int ret[N];              // indicator for retention
-  int pil[N];              // indicator for piling
-  
-  }
-  
-  parameters {
-  
-  real a0;                          // spline intercept
-  vector[num_basis] w0;             // weights
-  vector[nclust] c0;                // intercept by cluster
-  real b_sex;                       // slope for sex
-  real b_ret;                       // slope for retention
-  real b_pil;                       // slope for piling
-  real b_mas;                       // slope for mass
-  real b_hfl;                       // slope for hfl
-  real b_bci;                       // slope for body condition
-  
-  }
-  
-  model {
-  
-  // priors (these are on a normal scale)
-  // normal scale priors for spline parameters
-  w0 ~ normal(0, 1);                     // weights
-  a0 ~ normal(0, 1);                     // intercept
-  
-  // coefficients
-  c0[clust] ~ normal(0, 1);               // normal prior on c0
-  b_sex ~ normal(0, 2.5);                // normal prior on b_sex
-  b_ret ~ normal(0, 2.5);                // normal prior on b_ret
-  b_pil ~ normal(0, 2.5);                // normal prior on b_pil
-  b_mas ~ normal(0, 2.5);                // normal prior on b_mas
-  b_hfl ~ normal(0, 2.5);                // normal prior on b_hfl
-  b_bci ~ normal(0, 2.5);                // normal prior on b_bci
-  
-  // model
-  // linear predictor
-  vector[N] bw;
-  vector[N] lambda;
-  
-  bw = to_vector(basis * w0);
-  
-  for (i in 1:N) {
-  
-  lambda[i] = exp(a0 + bw[i]) *
-  
-            exp(c0[clust[i]] +
-                b_sex * sex[i] + 
-                b_ret * ret[i] + 
-                b_pil * pil[i] +
-                b_mas * mas[i] +
-                b_hfl * hfl[i] +
-                b_bci * bci[i]);
-  
-  }
-  
-  y ~ poisson(lambda);
-  
-  }
-  
-  generated quantities {
-  
-  // hazard ratios
-  real hr_sex = exp(b_sex);
-  real hr_ret = exp(b_ret);
-  real hr_pil = exp(b_pil);
-  real hr_mas = exp(b_mas);
-  real hr_hfl = exp(b_hfl);
-  real hr_bci = exp(b_bci);
-  
-  }
-  
-  ",
-  
+  file = "m2.stan",
   data = fates.stan.1,
-  chains = 4,
+  chains = 1,
   warmup = 1000,
   iter = 2000
   
 )
 
-print(m6)
+print(m2)
 
 # estimates
-plot(m6, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
-plot(m6, pars = c("c0[1]", "c0[2]", "c0[3]", "c0[4]"))
+plot(m2, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
+plot(m2, pars = c("hr_col"))
 
 # trace
-traceplot(m6, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
-traceplot(m6, pars = c("c0[1]", "c0[2]", "c0[3]", "c0[4]"))
+traceplot(m2, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
+traceplot(m2, pars = c("cens0", "hr_col"))
 
 #_______________________________________________________________________________________________
-# 6. M7 - Same as m6, but with a random cluster intercept in the spline function ----
-#_______________________________________________________________________________________________
-
-m7 <- rstan::stan(
-  
-  model_code = "
-  
-  data {
-  
-  // number of observations
-  int N;                       // obs
-  int num_basis;               // basis functions
-  int nclust;                  // clusters
-  
-  // response variable (binary, 0-1)
-  int y[N];
-  
-  // time (required for estimating time-variant hazard);
-  // time in week of the year (1-52)
-  vector[N] t;       
-  
-  // spline matrix
-  matrix[N, num_basis] basis;
-  
-  // covariates (continuous)
-  real mas[N];             // standardized mass (kg)
-  real hfl[N];             // standardized hfl (cm)
-  real bci[N];             // standardized body condition index (mass/hfl)
-  
-  // covariates (categorical)
-  int clust[N];            // index for cluster (1-4)
-  int sex[N];              // indicator for sex (0 = F, 1 = M)
-  int ret[N];              // indicator for retention
-  int pil[N];              // indicator for piling
-  
-  }
-  
-  parameters {
-  
-  real a0;                          // spline intercept
-  vector[nclust] c0;                // spline random intercepts
-  real<lower=0> sigma;              // random intercept SD
-  vector[num_basis] w0;             // weights
-  real b_sex;                       // slope for sex
-  real b_ret;                       // slope for retention
-  real b_pil;                       // slope for piling
-  real b_mas;                       // slope for mass
-  real b_hfl;                       // slope for hfl
-  real b_bci;                       // slope for body condition
-  
-  }
-  
-  model {
-  
-  // priors (these are on a normal scale)
-  // normal scale priors for spline parameters
-  w0 ~ normal(0, 1);                     // weights
-  a0 ~ normal(0, 2);                     // intercept
-  c0[clust] ~ normal(0, 1);              // random intercepts
-  sigma ~ exponential(1);                // random intercept standard deviation
-  
-  // coefficients
-  b_sex ~ normal(0, 2.5);                // normal prior on b_sex
-  b_ret ~ normal(0, 2.5);                // normal prior on b_ret
-  b_pil ~ normal(0, 2.5);                // normal prior on b_pil
-  b_mas ~ normal(0, 2.5);                // normal prior on b_mas
-  b_hfl ~ normal(0, 2.5);                // normal prior on b_hfl
-  b_bci ~ normal(0, 2.5);                // normal prior on b_bci
-  
-  // model
-  // linear predictor
-  vector[N] bw;
-  vector[N] lambda;
-  vector[N] a;
-  
-  bw = to_vector(basis * w0);
-  
-  for (i in 1:N) {
-  
-  a[i] = a0 + sigma * c0[clust[i]];
-  
-  lambda[i] = exp(a[i] + bw[i]) *
-  
-            exp(b_sex * sex[i] + 
-                b_ret * ret[i] + 
-                b_pil * pil[i] +
-                b_mas * mas[i] +
-                b_hfl * hfl[i] +
-                b_bci * bci[i]);
-  
-  }
-  
-  y ~ poisson(lambda);
-  
-  }
-  
-  generated quantities {
-  
-  // cluster-specific intercepts
-  real a_c1 = exp(a0 + sigma * c0[1]);
-  real a_c2 = exp(a0 + sigma * c0[2]);
-  real a_c3 = exp(a0 + sigma * c0[3]);
-  real a_c4 = exp(a0 + sigma * c0[4]);
-  
-  // hazard ratios
-  real hr_sex = exp(b_sex);
-  real hr_ret = exp(b_ret);
-  real hr_pil = exp(b_pil);
-  real hr_mas = exp(b_mas);
-  real hr_hfl = exp(b_hfl);
-  real hr_bci = exp(b_bci);
-  
-  }
-  
-  ",
-  
-  data = fates.stan.1,
-  chains = 4,
-  warmup = 1000,
-  iter = 2000
-  
-)
-
-print(m7)
-
-# non-centering works!
-
-# estimates
-plot(m7, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
-plot(m7, pars = c("a_c1", "a_c2", "a_c3", "a_c4"))
-
-# trace
-traceplot(m7, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
-traceplot(m7, pars = c("a_c1", "a_c2", "a_c3", "a_c4"))
-
-#_______________________________________________________________________________________________
-# 5. Save image ----
+# 7. Save image ----
 #_______________________________________________________________________________________________
 
 save.image("RData - final/poisson_model.RData")

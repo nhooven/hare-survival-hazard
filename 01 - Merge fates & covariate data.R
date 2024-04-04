@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 04 Mar 2024 
+# Date last modified: 04 Apr 2024 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -20,11 +20,11 @@ library(survival)        # survsplit function
 # 2. Read in data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Raw data/fates_03_04_2024.csv")
-covs <- read.csv("Raw data/covariates_02_09_2024.csv")
+fates <- read.csv("Raw data/fates_04_04_2024.csv")
+covs <- read.csv("Raw data/covariates_04_04_2024.csv")
 
 # define cutoff date
-cutoff <- as.Date("2024-02-29", tz = "America/Los_Angeles")
+cutoff <- as.Date("2024-03-31", tz = "America/Los_Angeles")
 
 #_______________________________________________________________________________________________
 # 3. Keep relevant columns ----
@@ -76,7 +76,7 @@ fates.1 <- fates.1 %>%
   mutate(Capture.date = as.Date(mdy(Capture.date)),
          Estimated.event.date = as.Date(mdy(Estimated.event.date))) %>%
   
-  # change NAs in event date to 01-31-2024
+  # change NAs in event date to cutoff
   replace_na(list(Estimated.event.date = cutoff)) %>%
   
   # keep records with Capture.date < cutoff date
@@ -107,10 +107,16 @@ cut.points <- seq(1,
                   as.numeric(cutoff) - date.origin,
                   7)
 
-# create numeric status variable
-fates.1$status.num <- ifelse(fates.1$Event.type == "Mortality",
+# create numeric status variable (indicating if this is an end point or not)
+# here we should only indicate censoring events that are UNINFORMATIVE
+fates.1 <- fates.1 %>% 
+  
+  mutate(status.num = ifelse(Event.type == "Mortality" |
+                            (Event.type == "Censor" & 
+                             General.cause %in% c("Unknown",
+                                                  "Dead transmitter")),
                              1,
-                             0)
+                             0))
 
 # survSplit
 fates.2 <- survSplit(Surv(start,
@@ -120,6 +126,22 @@ fates.2 <- survSplit(Surv(start,
                      cut = cut.points,
                      start = "start",
                      end = "end")
+
+# change NAs in "start" to the stop time and create numeric indicator variables
+fates.2 <- fates.2 %>%
+  
+  mutate(start = ifelse(is.na(start) == TRUE,
+                        end,
+                        start)) %>%
+  
+  mutate(mort = ifelse(Event.type == "Mortality" &
+                       status.num == 1,
+                       1,
+                       0),
+         cens = ifelse(Event.type == "Censor" &
+                       status.num == 1,
+                       1,
+                       0))
 
 # keep relevant columns, create numeric week and year variables
 fates.3 <- fates.2 %>%
@@ -133,7 +155,8 @@ fates.3 <- fates.2 %>%
                 Event.type,
                 start,
                 end,
-                status.num) %>%
+                mort,
+                cens) %>%
   
   # create numeric week variable (back-transform)
   mutate(week = as.numeric(format(as.Date(end + date.origin, 
@@ -370,14 +393,23 @@ fates.5 <- fates.4 %>% dplyr::select(-c(start, end))
 # 7. Standardize and format covariates ----
 #_______________________________________________________________________________________________
 
-# use an indicator variable for sex (0 = F [intercept])
-fates.5$Sex.1 <- ifelse(fates.5$Sex == "F",
+fates.5 <- fates.5 %>%
+  
+  mutate(
+         # use an indicator variable for sex (0 = F [intercept])
+         Sex.1 = ifelse(Sex == "F",
                         0,
-                        1)
-
-fates.5$Mass.1 <- as.numeric(scale(fates.5$Mass))
-
-fates.5$HFL.1 <- as.numeric(scale(fates.5$HFL))
+                        1),
+         
+         # use an indicator variable for Collar.type (0 = VHF-only)
+         Collar.type.1 = ifelse(Collar.type == "VHF-ONLY",
+                                0,
+                                1),
+         
+         # center and scale continuous covariates
+         Mass.1 = as.numeric(scale(Mass)),
+         HFL.1 = as.numeric(scale(HFL))
+         )
 
 #_______________________________________________________________________________________________
 # 8. Add treatment variable ----
@@ -389,46 +421,46 @@ fates.5$HFL.1 <- as.numeric(scale(fates.5$HFL))
 # week 40 for 2A, 2B, 3A, and 3B
 # week 41 for 1A, 1B, 4A, and 4B
 
-fates.5$Treatment.Retention <- NA
-fates.5$Treatment.Piling <- NA
+fates.5$trt.ret <- NA
+fates.5$trt.pil <- NA
 
 # controls
-fates.5$Treatment.Retention[fates.5$Site %in% c("1C", "2C", "3C", "4C")] <- 0
-fates.5$Treatment.Piling[fates.5$Site %in% c("1C", "2C", "3C", "4C")] <- 0
+fates.5$trt.ret[fates.5$Site %in% c("1C", "2C", "3C", "4C")] <- 0
+fates.5$trt.pil[fates.5$Site %in% c("1C", "2C", "3C", "4C")] <- 0
 
 # treatments in 2022 (akin to controls)
-fates.5$Treatment.Retention[fates.5$Site %in% c("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B") &
-                              fates.5$year == 2022] <- 0
-fates.5$Treatment.Piling[fates.5$Site %in% c("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B") &
-                           fates.5$year == 2022] <- 0
+fates.5$trt.ret[fates.5$Site %in% c("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B") &
+                fates.5$year == 2022] <- 0
+fates.5$trt.pil[fates.5$Site %in% c("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B") &
+                fates.5$year == 2022] <- 0
 
 # 2 and 3 before week 40, 2023
-fates.5$Treatment.Retention[fates.5$Site %in% c("2A", "2B", "3A", "3B") &
-                              fates.5$week < 40 &
-                              fates.5$year == 2023] <- 0
-fates.5$Treatment.Piling[fates.5$Site %in% c("2A", "2B", "3A", "3B") &
-                           fates.5$week < 40 &
-                           fates.5$year == 2023] <- 0
+fates.5$trt.ret[fates.5$Site %in% c("2A", "2B", "3A", "3B") &
+                fates.5$week < 40 &
+                fates.5$year == 2023] <- 0
+fates.5$trt.pil[fates.5$Site %in% c("2A", "2B", "3A", "3B") &
+                fates.5$week < 40 &
+                fates.5$year == 2023] <- 0
 
 # 1 and 4 before week 41, 2023
-fates.5$Treatment.Retention[fates.5$Site %in% c("1A", "1B", "4A", "4B") &
-                              fates.5$week < 41 &
-                              fates.5$year == 2023] <- 0
-fates.5$Treatment.Piling[fates.5$Site %in% c("1A", "1B", "4A", "4B") &
-                           fates.5$week < 41 &
-                           fates.5$year == 2023] <- 0
+fates.5$trt.ret[fates.5$Site %in% c("1A", "1B", "4A", "4B") &
+                fates.5$week < 41 &
+                fates.5$year == 2023] <- 0
+fates.5$trt.pil[fates.5$Site %in% c("1A", "1B", "4A", "4B") &
+                fates.5$week < 41 &
+                fates.5$year == 2023] <- 0
 
 # rest of NAs for retention units
-fates.5$Treatment.Retention[is.na(fates.5$Treatment.Retention) &
-                              fates.5$Site %in% c("1A", "2B", "3B", "4A")] <- 1
-fates.5$Treatment.Piling[is.na(fates.5$Treatment.Piling) &
-                           fates.5$Site %in% c("1A", "2B", "3B", "4A")] <- 0
+fates.5$trt.ret[is.na(fates.5$trt.ret) &
+                      fates.5$Site %in% c("1A", "2B", "3B", "4A")] <- 1
+fates.5$trt.pil[is.na(fates.5$trt.pil) &
+                      fates.5$Site %in% c("1A", "2B", "3B", "4A")] <- 0
 
 # rest of NAs for piling units
-fates.5$Treatment.Retention[is.na(fates.5$Treatment.Retention) &
-                              fates.5$Site %in% c("1B", "2A", "3A", "4B")] <- 0
-fates.5$Treatment.Piling[is.na(fates.5$Treatment.Piling) &
-                           fates.5$Site %in% c("1B", "2A", "3A", "4B")] <- 1
+fates.5$trt.ret[is.na(fates.5$trt.ret) &
+                      fates.5$Site %in% c("1B", "2A", "3A", "4B")] <- 0
+fates.5$trt.pil[is.na(fates.5$trt.pil) &
+                      fates.5$Site %in% c("1B", "2A", "3A", "4B")] <- 1
 
 #_______________________________________________________________________________________________
 # 9. Add cluster variable (will be an index) ----
@@ -451,4 +483,4 @@ fates.5$BCI.1 <- scale(fates.5$BCI)
 # 11. Write to csv ----
 #_______________________________________________________________________________________________
 
-write.csv(fates.5, "Cleaned data/fates_cleaned_03_04_2024.csv")
+write.csv(fates.5, "Cleaned data/fates_cleaned_04_04_2024.csv")
