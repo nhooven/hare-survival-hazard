@@ -57,7 +57,7 @@ data {
   
   // priors (these are on a normal scale)
   // normal scale priors for spline parameters
-  w0 ~ normal(0, 1);                     // weights
+  w0 ~ normal(0, 0.5);                  // weights
   a0 ~ normal(0, 2);                     // intercept
   c0[clust] ~ normal(0, 1);              // random intercepts
   sigma ~ exponential(1);                // random intercept standard deviation

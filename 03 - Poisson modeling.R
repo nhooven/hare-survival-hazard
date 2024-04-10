@@ -154,6 +154,40 @@ traceplot(m2, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci
 traceplot(m2, pars = c("cens0", "hr_col"))
 
 #_______________________________________________________________________________________________
+# 7. Run third model (censoring likelihood, constraining spline weights even more) ----
+#_______________________________________________________________________________________________
+
+# here we need to balance (1) the seasonal variance in hazard accounted for by
+# the spline and (2) the variance attributable to covariates
+
+# initial N(0, 1) priors for spline weights were very uncertain and led to 
+# a large spike in spring mortality
+# balancing the magnitude and spread of these coefficients will be important
+# for inference - we don't want to overfit! 
+# more skeptical priors should draw our spline function closer to zero
+
+m3 <- rstan::stan(
+  
+  file = "m3.stan",
+  data = fates.stan.1,
+  chains = 1,
+  warmup = 1000,
+  iter = 2000
+  
+)
+
+print(m3)
+
+# estimates
+plot(m3, pars = c("w0"))
+plot(m3, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
+plot(m3, pars = c("hr_col"))
+
+# trace
+traceplot(m3, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
+traceplot(m2, pars = c("cens0", "hr_col"))
+
+#_______________________________________________________________________________________________
 # 7. Save image ----
 #_______________________________________________________________________________________________
 
