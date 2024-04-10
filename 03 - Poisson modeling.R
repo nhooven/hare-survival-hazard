@@ -185,7 +185,7 @@ plot(m3, pars = c("hr_col"))
 
 # trace
 traceplot(m3, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
-traceplot(m2, pars = c("cens0", "hr_col"))
+traceplot(m3, pars = c("cens0", "hr_col"))
 
 #_______________________________________________________________________________________________
 # 7. Save image ----
