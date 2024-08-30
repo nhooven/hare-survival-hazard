@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 11 Mar 2024
 # Date completed: 11 Mar 2024
-# Date last modified: 11 Mar 2024
+# Date last modified: 30 Aug 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -27,7 +27,7 @@ load("RData - final/poisson_model.RData")
 #_______________________________________________________________________________________________
 
 # extract draws
-model.draws <- as.data.frame(rstan::extract(m7))
+model.draws <- as.data.frame(rstan::extract(m3))
 
 #_______________________________________________________________________________________________
 # 4. Calculate cumulative survival curves ----
@@ -165,7 +165,8 @@ ggplot(data = preds.df.med) +
   
   # theme arguments
   theme(panel.grid = element_blank(),
-        legend.position = c(0.8, 0.7),
+        legend.position = "inside",
+        legend.position.inside = c(0.8, 0.7),
         legend.title = element_blank()) +
   
   # axis labels
