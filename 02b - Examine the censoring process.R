@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 04 Apr 2024
 # Date completed: 
-# Date last modified: 04 Apr 2024
+# Date last modified: 28 Sep 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -19,7 +19,7 @@ library(lubridate)
 # 2. Read in and format data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Raw data/fates_04_04_2024.csv")
+fates <- read.csv("Raw data/fates_09_28_2024.csv")
 
 # initial data cleaning
 fates.1 <- fates %>%

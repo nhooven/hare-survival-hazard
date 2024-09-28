@@ -23,6 +23,7 @@ data {
   // covariates (categorical)
   int clust[N];            // index for cluster (1-4)
   int sex[N];              // indicator for sex (0 = F, 1 = M)
+  int trt[N];              // indicator for post-treatment
   int ret[N];              // indicator for retention
   int pil[N];              // indicator for piling
   
@@ -35,6 +36,8 @@ data {
   real<lower=0> sigma;              // random intercept SD
   vector[num_basis] w0;             // weights
   real b_sex;                       // slope for sex
+  real b_trt_r;                     // slope for treatment interaction with ret
+  real b_trt_p;                     // slope for treatment interaction with pil
   real b_ret;                       // slope for retention
   real b_pil;                       // slope for piling
   real b_mas;                       // slope for mass
@@ -54,6 +57,8 @@ data {
   
   // coefficients
   b_sex ~ normal(0, 2.5);                // normal prior on b_sex
+  b_trt_r ~ normal(0, 2.5);                // normal prior on b_trt_r
+  b_trt_p ~ normal(0, 2.5);                // normal prior on b_trt_p
   b_ret ~ normal(0, 2.5);                // normal prior on b_ret
   b_pil ~ normal(0, 2.5);                // normal prior on b_pil
   b_mas ~ normal(0, 2.5);                // normal prior on b_mas
@@ -75,8 +80,10 @@ data {
   lambda[i] = exp(a[i] + bw[i]) *
   
             exp(b_sex * sex[i] + 
-                b_ret * ret[i] + 
-                b_pil * pil[i] +
+                b_ret * ret[i] +
+                b_trt_r * trt[i] * ret[i] + 
+                b_pil * pil[i] + 
+                b_trt_p * trt[i] * pil[i] +
                 b_mas * mas[i] +
                 b_hfl * hfl[i] +
                 b_bci * bci[i]);
@@ -94,13 +101,5 @@ data {
   real a_c2 = exp(a0 + sigma * c0[2]);
   real a_c3 = exp(a0 + sigma * c0[3]);
   real a_c4 = exp(a0 + sigma * c0[4]);
-  
-  // hazard ratios
-  real hr_sex = exp(b_sex);
-  real hr_ret = exp(b_ret);
-  real hr_pil = exp(b_pil);
-  real hr_mas = exp(b_mas);
-  real hr_hfl = exp(b_hfl);
-  real hr_bci = exp(b_bci);
   
   }

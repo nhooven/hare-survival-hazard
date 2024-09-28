@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 30 Aug 2024 
+# Date last modified: 28 Sep 2024 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -20,11 +20,11 @@ library(survival)        # survsplit function
 # 2. Read in data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Raw data/fates_08_30_2024.csv")
-covs <- read.csv("Raw data/covariates_08_30_2024.csv")
+fates <- read.csv("Raw data/fates_09_28_2024.csv")
+covs <- read.csv("Raw data/covariates_09_28_2024.csv")
 
 # define cutoff date
-cutoff <- as.Date("2024-08-31", tz = "America/Los_Angeles")
+cutoff <- as.Date("2024-09-30", tz = "America/Los_Angeles")
 
 #_______________________________________________________________________________________________
 # 3. Keep relevant columns ----
@@ -49,6 +49,12 @@ fates.1 <- fates %>%
 
 # covariates
 covs.1 <- covs %>%
+  
+  # keep only observations that exist
+  filter(Site.ID %in% c("1A", "1B", "1C", 
+                        "2A", "2B", "2C", 
+                        "3A", "3B", "3C", 
+                        "4A", "4B", "4C")) %>%
   
   # keep relevant columns
   dplyr::select(Site.ID,
@@ -415,72 +421,74 @@ fates.5 <- fates.5 %>%
 # 8. Add treatment variable ----
 #_______________________________________________________________________________________________
 
-# here, we will use two indicator variables to estimate the effect of each treatment
-# compared to control (i.e., the intercept)
+# new df to manipulate
+fates.6 <- fates.5
+
+# here, we will use three indicator variables to estimate the effect of each treatment
+# compared to control (i.e., the intercept), while also accounting for pre- and post-treatment
+# sensu Abele et al. (2013)
 
 # week 40 for 2A, 2B, 3A, and 3B
 # week 41 for 1A, 1B, 4A, and 4B
 
-fates.5$trt.ret <- NA
-fates.5$trt.pil <- NA
+fates.6$post.trt <- NA
+fates.6$trt.ret <- NA
+fates.6$trt.pil <- NA
 
+# assign 0 for pre-treatment and 1 for post-treatment
+# 2 and 3
+fates.6$post.trt[fates.6$Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+                 fates.6$week < 40 &
+                 fates.6$year == 2023] <- 0
+
+fates.6$post.trt[fates.6$Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+                 fates.6$week >= 40 &
+                 fates.6$year == 2023] <- 1
+
+# 1 and 4
+fates.6$post.trt[fates.6$Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+                 fates.6$week < 41 &
+                 fates.6$year == 2023] <- 0
+
+fates.6$post.trt[fates.6$Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+                 fates.6$week >= 41 &
+                 fates.6$year == 2023] <- 1
+
+# all remaining NAs should be 1
+fates.6$post.trt[is.na(fates.6$post.trt) == TRUE] <- 1
+
+# assign treatments
 # controls
-fates.5$trt.ret[fates.5$Site %in% c("1C", "2C", "3C", "4C")] <- 0
-fates.5$trt.pil[fates.5$Site %in% c("1C", "2C", "3C", "4C")] <- 0
+fates.6$trt.ret[fates.6$Site %in% c("1C", "2C", "3C", "4C")] <- 0
+fates.6$trt.pil[fates.6$Site %in% c("1C", "2C", "3C", "4C")] <- 0
 
-# treatments in 2022 (akin to controls)
-fates.5$trt.ret[fates.5$Site %in% c("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B") &
-                fates.5$year == 2022] <- 0
-fates.5$trt.pil[fates.5$Site %in% c("1A", "1B", "2A", "2B", "3A", "3B", "4A", "4B") &
-                fates.5$year == 2022] <- 0
+# retention
+fates.6$trt.ret[fates.6$Site %in% c("1A", "2B", "3B", "4A")] <- 1
+fates.6$trt.pil[fates.6$Site %in% c("1A", "2B", "3B", "4A")] <- 0
 
-# 2 and 3 before week 40, 2023
-fates.5$trt.ret[fates.5$Site %in% c("2A", "2B", "3A", "3B") &
-                fates.5$week < 40 &
-                fates.5$year == 2023] <- 0
-fates.5$trt.pil[fates.5$Site %in% c("2A", "2B", "3A", "3B") &
-                fates.5$week < 40 &
-                fates.5$year == 2023] <- 0
-
-# 1 and 4 before week 41, 2023
-fates.5$trt.ret[fates.5$Site %in% c("1A", "1B", "4A", "4B") &
-                fates.5$week < 41 &
-                fates.5$year == 2023] <- 0
-fates.5$trt.pil[fates.5$Site %in% c("1A", "1B", "4A", "4B") &
-                fates.5$week < 41 &
-                fates.5$year == 2023] <- 0
-
-# rest of NAs for retention units
-fates.5$trt.ret[is.na(fates.5$trt.ret) &
-                      fates.5$Site %in% c("1A", "2B", "3B", "4A")] <- 1
-fates.5$trt.pil[is.na(fates.5$trt.pil) &
-                      fates.5$Site %in% c("1A", "2B", "3B", "4A")] <- 0
-
-# rest of NAs for piling units
-fates.5$trt.ret[is.na(fates.5$trt.ret) &
-                      fates.5$Site %in% c("1B", "2A", "3A", "4B")] <- 0
-fates.5$trt.pil[is.na(fates.5$trt.pil) &
-                      fates.5$Site %in% c("1B", "2A", "3A", "4B")] <- 1
+# piling
+fates.6$trt.ret[fates.6$Site %in% c("1B", "2A", "3A", "4B")] <- 0
+fates.6$trt.pil[fates.6$Site %in% c("1B", "2A", "3A", "4B")] <- 1
 
 #_______________________________________________________________________________________________
 # 9. Add cluster variable (will be an index) ----
 #_______________________________________________________________________________________________
 
-fates.5$cluster <- as.numeric(substr(fates.5$Site, 1, 1))
+fates.6$cluster <- as.numeric(substr(fates.6$Site, 1, 1))
 
 #_______________________________________________________________________________________________
 # 10. Add principal component "body size" and body condition index ----
 #_______________________________________________________________________________________________
 
 # calculate first principal component axis
-fates.5$PC1 <- (fates.5$Mass.1 + fates.5$HFL.1) / 2
+fates.6$PC1 <- (fates.6$Mass.1 + fates.6$HFL.1) / 2
 
 # divide mass by HFL to create a body condition index uncorrelated with either variable
-fates.5$BCI <- fates.5$Mass.1 / fates.5$HFL.1
-fates.5$BCI.1 <- scale(fates.5$BCI)
+fates.6$BCI <- fates.6$Mass.1 / fates.6$HFL.1
+fates.6$BCI.1 <- scale(fates.6$BCI)
 
 #_______________________________________________________________________________________________
 # 11. Write to csv ----
 #_______________________________________________________________________________________________
 
-write.csv(fates.5, "Cleaned data/fates_cleaned_08_30_2024.csv")
+write.csv(fates.6, "Cleaned data/fates_cleaned_09_28_2024.csv")

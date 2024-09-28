@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 29 Dec 2023
 # Date completed: 04 Mar 2024
-# Date last modified: 04 Mar 2024
+# Date last modified: 28 Sep 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -14,7 +14,7 @@
 
 library(tidyverse)       # manipulate and clean data
 library(rstan)           # modeling with Stan
-library(splines)
+library(mgcv)
 library(ggridges)        # ridgeline plot
 
 #_______________________________________________________________________________________________
@@ -28,7 +28,7 @@ load("RData - final/poisson_model.RData")
 #_______________________________________________________________________________________________
 
 # extract draws
-model.draws <- as.data.frame(rstan::extract(m7))
+model.draws <- as.data.frame(rstan::extract(m3))
 
 #_______________________________________________________________________________________________
 # 4. Visualize time-varying baseline hazard function ----
@@ -40,10 +40,9 @@ model.draws <- as.data.frame(rstan::extract(m7))
 # let's create a prediction df first
 weeks.pred <- seq(1, 52, length.out = 100)           # 100 increments to predict on
 
-basis.pred <- bs(weeks.pred,       
-                 knots = knot.list[-c(1, n.knots)],          
-                 degree = 3,                     
-                 intercept = FALSE)
+basis.pred <- cSplineDes(weeks.pred,
+                         knots = knot.list,
+                         ord = 4)
 
 # we'll start by calculating predictions for every draw
 spline.preds.df <- data.frame()
@@ -51,10 +50,10 @@ spline.preds.df <- data.frame()
 for (i in 1:nrow(model.draws)) {
   
   # subset spline parameters only
-  spline.params <- model.draws[i , c(1, 7:12)]
+  spline.params <- model.draws[i , c(1, 7:11)]
   
   # convert to vector for multiplication
-  w0 <- t(as.matrix(as.numeric(spline.params[ ,2:7])))
+  w0 <- t(as.matrix(as.numeric(spline.params[ ,2:6])))
   
   # multiply with 'sweep'
   w0.by.b <- sweep(basis.pred, 2, w0, `*`)
@@ -108,12 +107,12 @@ ggplot() +
                 y = `50%`),     
             linewidth = 1.25) +
   
-  # lines for all 4000 predictions
+  # lines for all predictions
   geom_line(data = spline.preds.df,
             aes(x = x,
                 y = y,
                 group = draw),
-            alpha = 0.01) +
+            alpha = 0.03) +
   
   # axis labels
   ylab("Baseline hazard") +

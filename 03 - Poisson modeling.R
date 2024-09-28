@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
 # Date completed: 29 Dec 2023
-# Date last modified: 08 Aug 2024
+# Date last modified: 28 Sep 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -15,12 +15,13 @@
 library(tidyverse)       # manipulate and clean data
 library(rstan)           # modeling with Stan
 library(splines)         # construct basic functions
+library(mgcv)            # cyclic splines
 
 #_______________________________________________________________________________________________
 # 2. Read in and format data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Cleaned data/fates_cleaned_08_30_2024.csv")
+fates <- read.csv("Cleaned data/fates_cleaned_09_28_2024.csv")
 
 # keep only columns we need for modeling
 fates.1 <- fates %>% dplyr::select(cluster,
@@ -36,6 +37,7 @@ fates.1 <- fates %>% dplyr::select(cluster,
                                    HFL.1,
                                    PC1,
                                    BCI.1,
+                                   post.trt,
                                    trt.ret,
                                    trt.pil)
 
@@ -46,18 +48,17 @@ fates.1 <- fates %>% dplyr::select(cluster,
 # procedure adapted from https://mc-stan.org/users/documentation/case-studies/splines_in_stan.html
 
 # define knots (quantile)
-n.knots <- 5
+n.knots <- 5 + 1
 
 knot.list <- quantile(fates.1$week, 
                       probs = seq(from = 0, 
                                   to = 1, 
                                   length.out = n.knots))
 
-# creating the basis matrix
-basis <- bs(fates.1$week,                   # create weeks 
-            knots = knot.list[-c(1, n.knots)],          
-            degree = 3,                     # cubic spline
-            intercept = FALSE)
+# creating the basis matrix (cyclic spline)
+basis <- cSplineDes(fates.1$week,
+                    knots = knot.list,
+                    ord = 4)                # cubic
 
 # plot basis functions
 basis.plot <- tibble(week = fates.1$week,
@@ -65,9 +66,8 @@ basis.plot <- tibble(week = fates.1$week,
                      b2 = basis[ , 2],
                      b3 = basis[ , 3],
                      b4 = basis[ , 4],
-                     b5 = basis[ , 5],
-                     b6 = basis[ , 6]) %>%
-              pivot_longer(cols = b1:b6)
+                     b5 = basis[ , 5]) %>%
+              pivot_longer(cols = b1:b5)
 
 ggplot(data = fates.1,
        aes(x = week,
@@ -98,6 +98,7 @@ fates.stan.1 <- list(N = nrow(fates.1),
                      hfl = fates.1$HFL.1,
                      bsz = fates.1$PC1,
                      bci = fates.1$BCI,
+                     trt = fates.1$post.trt,
                      ret = fates.1$trt.ret,
                      pil = fates.1$trt.pil,
                      clust = fates.1$cluster,
@@ -122,11 +123,11 @@ m1 <- rstan::stan(
 print(m1)
 
 # estimates
-plot(m1, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
+plot(m1, pars = c("b_sex", "b_ret", "b_pil", "b_trt_r", "b_trt_p", "b_mas", "b_hfl", "b_bci"))
 plot(m1, pars = c("a_c1", "a_c2", "a_c3", "a_c4"))
 
 # trace
-traceplot(m1, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
+traceplot(m1, pars = c("b_sex", "b_ret", "b_pil", "b_trt_r", "b_trt_p", "b_mas", "b_hfl", "b_bci"))
 traceplot(m1, pars = c("a_c1", "a_c2", "a_c3", "a_c4"))
 
 #_______________________________________________________________________________________________
@@ -180,12 +181,14 @@ print(m3)
 
 # estimates
 plot(m3, pars = c("w0"))
-plot(m3, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
-plot(m3, pars = c("hr_col"))
+plot(m3, pars = c("b_sex", "b_ret", "b_pil", "b_mas", "b_hfl", "b_bci"))
+plot(m3, pars = c("b_col"))
 
-# trace
-traceplot(m3, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
-traceplot(m3, pars = c("cens0", "hr_col"))
+
+# for these interactive effects, calculate the "total coefficient" as:
+# (b_ret * ret) + (b_trt_r * trt * ret), etc. 
+
+# show these effects as "before-after" plots
 
 #_______________________________________________________________________________________________
 # 7. Save image ----

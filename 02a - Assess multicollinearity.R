@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 08 Jan 2024
 # Date completed: 08 Jan 2024
-# Date last modified: 04 Apr 2024
+# Date last modified: 28 Sep 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -18,7 +18,7 @@ library(tidyverse)       # manipulate and clean data
 # 2. Read in and format data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Cleaned data/fates_cleaned_04_04_2024.csv")
+fates <- read.csv("Cleaned data/fates_cleaned_09_28_2024.csv")
 
 #_______________________________________________________________________________________________
 # 3. Examine potential multicollinearity ----
@@ -102,7 +102,7 @@ cor.test(x = fates$HFL.1,
 
 
 # variance inflation factors (general Poisson regression)
-vif.model <- glm(status.num ~ Sex.1 + Treatment.Retention + Treatment.Piling + Mass.1 + HFL.1,
+vif.model <- glm(mort ~ Sex.1 + trt.ret + trt.ret + Mass.1 + HFL.1,
                  data = fates,
                  family = poisson)
 
