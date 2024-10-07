@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
 # Date completed: 29 Dec 2023
-# Date last modified: 28 Sep 2024
+# Date last modified: 06 Oct 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -82,8 +82,6 @@ ggplot(data = fates.1,
             linewidth = 1.5,
             alpha = 0.25)
 
-num_basis <- ncol(basis)
-
 #_______________________________________________________________________________________________
 # 4. Build data list ----
 #_______________________________________________________________________________________________
@@ -104,7 +102,7 @@ fates.stan.1 <- list(N = nrow(fates.1),
                      clust = fates.1$cluster,
                      nclust = 4,
                      basis = basis,
-                     num_basis = num_basis)
+                     nbasis = ncol(basis))
 
 #_______________________________________________________________________________________________
 # 5. Run first model (random intercept for cluster) ----
