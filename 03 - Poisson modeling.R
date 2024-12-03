@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
 # Date completed: 29 Dec 2023
-# Date last modified: 06 Oct 2024
+# Date last modified: 03 Dec 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -21,7 +21,7 @@ library(mgcv)            # cyclic splines
 # 2. Read in and format data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Cleaned data/fates_cleaned_09_28_2024.csv")
+fates <- read.csv("Cleaned data/fates_cleaned_12_03_2024.csv")
 
 # keep only columns we need for modeling
 fates.1 <- fates %>% dplyr::select(cluster,

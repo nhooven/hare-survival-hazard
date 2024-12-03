@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 28 Sep 2024 
+# Date last modified: 03 Dec 2024 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -20,11 +20,11 @@ library(survival)        # survsplit function
 # 2. Read in data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Raw data/fates_09_28_2024.csv")
-covs <- read.csv("Raw data/covariates_09_28_2024.csv")
+fates <- read.csv("Raw data/fates_12_03_2024.csv")
+covs <- read.csv("Raw data/covariates_12_03_2024.csv")
 
 # define cutoff date
-cutoff <- as.Date("2024-09-30", tz = "America/Los_Angeles")
+cutoff <- as.Date("2024-10-31", tz = "America/Los_Angeles")
 
 #_______________________________________________________________________________________________
 # 3. Keep relevant columns ----
@@ -491,4 +491,4 @@ fates.6$BCI.1 <- scale(fates.6$BCI)
 # 11. Write to csv ----
 #_______________________________________________________________________________________________
 
-write.csv(fates.6, "Cleaned data/fates_cleaned_09_28_2024.csv")
+write.csv(fates.6, "Cleaned data/fates_cleaned_12_03_2024.csv")

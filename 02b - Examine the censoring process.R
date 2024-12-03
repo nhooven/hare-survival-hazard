@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 04 Apr 2024
 # Date completed: 
-# Date last modified: 28 Sep 2024
+# Date last modified: 03 Dec 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -19,7 +19,7 @@ library(lubridate)
 # 2. Read in and format data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Raw data/fates_09_28_2024.csv")
+fates <- read.csv("Raw data/fates_12_03_2024.csv")
 
 # initial data cleaning
 fates.1 <- fates %>%
@@ -78,7 +78,28 @@ ggplot() +
                      fill = as.factor(Collar.type)),
                  color = "black",
                  alpha = 0.5,
-                 binwidth = 28)  +
+                 binwidth = 10)  +
   
   theme(legend.position = "none",
         panel.grid = element_blank())
+
+# density split between known and unknown
+ggplot() +
+  
+  theme_bw() +
+  
+  facet_wrap(~ as.factor(Collar.type)) +
+  
+  geom_density(data = fates.1,
+               aes(x = Transmitter.lifetime,
+                   fill = as.factor(General.cause)),
+               color = "black",
+               alpha = 0.5)  +
+  
+  scale_fill_manual("Fate", values = c("purple", "gray")) + 
+  
+  theme(panel.grid = element_blank(),
+        legend.position = "inside",
+        legend.position.inside = c(0.8, 0.8)) +
+  
+  xlab("Transmitter lifetime (days)")
