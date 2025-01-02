@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 03 Dec 2024 
+# Date last modified: 02 Jan 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -20,11 +20,11 @@ library(survival)        # survsplit function
 # 2. Read in data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Raw data/fates_12_03_2024.csv")
-covs <- read.csv("Raw data/covariates_12_03_2024.csv")
+fates <- read.csv("Raw data/fates_01_02_2025.csv")
+covs <- read.csv("Raw data/covariates_01_02_2025.csv")
 
 # define cutoff date
-cutoff <- as.Date("2024-10-31", tz = "America/Los_Angeles")
+cutoff <- as.Date("2024-12-31", tz = "America/Los_Angeles")
 
 #_______________________________________________________________________________________________
 # 3. Keep relevant columns ----
@@ -45,7 +45,8 @@ fates.1 <- fates %>%
                 Capture.date,
                 Estimated.event.date,
                 Event.type,
-                General.cause)
+                General.cause, 
+                Specific.cause)
 
 # covariates
 covs.1 <- covs %>%
@@ -69,7 +70,10 @@ covs.1 <- covs %>%
   
   # rename columns
   rename(Site = Site.ID,
-         Ear.tag = Ear.tag..)
+         Ear.tag = Ear.tag..) %>%
+  
+  # coerce date
+  mutate(Date = as.Date(mdy(Date), tz = "America/Los_Angeles"))
 
 #_______________________________________________________________________________________________
 # 4. Format dates correctly ----
@@ -95,15 +99,16 @@ covs.1 <- covs.1 %>%
   mutate(Date = as.Date(mdy(Date)))
 
 #_______________________________________________________________________________________________
-# 5. Split by week ----
+# 5. Split by week and use correct identifiers for modeling ----
+#_______________________________________________________________________________________________
+# 5a. Define week cutoffs ----
 #_______________________________________________________________________________________________
 
 # here, we will use the survSplit function in the "survival" package to split the dataset by week
-# FUTURE: Determine recurrent time horizon for biological year, not human year
 
 # create numeric start and end variables
-# define origin for our analysis (2022-01-01)
-date.origin <- as.numeric(as.Date("2022-01-01"))
+# define origin for our analysis (2022-10-01)
+date.origin <- as.numeric(as.Date("2022-10-01"))
 
 fates.1$start <- as.numeric(fates.1$Capture.date) - date.origin
 fates.1$end <- as.numeric(fates.1$Estimated.event.date) - date.origin
@@ -113,8 +118,46 @@ cut.points <- seq(1,
                   as.numeric(cutoff) - date.origin,
                   7)
 
-# create numeric status variable (indicating if this is an end point or not)
-# here we should only indicate censoring events that are UNINFORMATIVE
+#_______________________________________________________________________________________________
+# 5b. Create lookup table for dates and weeks ----
+#_______________________________________________________________________________________________
+
+day.lookup <- data.frame(study.date = seq(as.Date("2022-10-01"), cutoff, by = 1),
+                         study.day = 1:length(seq(as.Date("2022-10-01"), cutoff, by = 1)),
+                         year.day = yday(seq(as.Date("2022-10-01"), cutoff, by = 1)),
+                         month = month(seq(as.Date("2022-10-01"), cutoff, by = 1)),
+                         year = year(seq(as.Date("2022-10-01"), cutoff, by = 1)),
+                         year.week = week(seq(as.Date("2022-10-01"), cutoff, by = 1)))
+
+# add in study week identifier
+week.id <- rep(1:length(cut.points), each = 7)
+
+day.lookup$study.week <- week.id[1:(length(week.id) - 
+                                   (length(week.id) - nrow(day.lookup)))]
+
+# add study-year-week (what we'll use for modeling)
+study.year.week.id <- c(rep(1:52, each = 7), rep(1:52, each = 7),
+                        rep(1:52, each = 7), rep(1:52, each = 7))
+
+day.lookup$study.year.week <- study.year.week.id[1:(length(study.year.week.id) - 
+                                                   (length(study.year.week.id) - nrow(day.lookup)))]
+
+# write to .csv for use later
+write.csv(day.lookup, "Cleaned data/day_lookup.csv")
+
+#_______________________________________________________________________________________________
+# 5c. Create numeric status variable indicating end points ----
+
+# here we only indicate censoring EVENTS that we would like to model.
+# this does not count:
+# - collar removals
+# - collar related morts after one week
+# - slipped collars
+# - any animals still alive at the end of the monitoring period 
+# BUT we still want to include these observations
+
+#_______________________________________________________________________________________________
+
 fates.1 <- fates.1 %>% 
   
   mutate(status.num = ifelse(Event.type == "Mortality" |
@@ -124,7 +167,10 @@ fates.1 <- fates.1 %>%
                              1,
                              0))
 
-# survSplit
+#_______________________________________________________________________________________________
+# 5d. Split dataset by cutoffs ----
+#_______________________________________________________________________________________________
+
 fates.2 <- survSplit(Surv(start,
                           end,
                           status.num) ~ .,
@@ -140,48 +186,58 @@ fates.2 <- fates.2 %>%
                         end,
                         start)) %>%
   
-  mutate(mort = ifelse(Event.type == "Mortality" &
-                       status.num == 1,
-                       1,
-                       0),
+  mutate(mort.pred = ifelse(Event.type == "Mortality" &
+                            General.cause == "Predation" &
+                            status.num == 1,
+                            1,
+                            0),
+         mort.oth = ifelse(Event.type == "Mortality" &
+                           General.cause != "Predation" &
+                           status.num == 1,
+                           1,
+                           0),
          cens = ifelse(Event.type == "Censor" &
                        status.num == 1,
                        1,
                        0))
 
-# keep relevant columns, create numeric week and year variables
+#_______________________________________________________________________________________________
+# 5e. Keep relevant variables and create week variables ----
+#_______________________________________________________________________________________________
+
+# add correct "study.year.week" as a variable
+fates.2$week <- NA
+
+for (i in 1:length(fates.2$start)) {
+  
+  fates.2$week[i] <- day.lookup$study.year.week[which(day.lookup$study.day == fates.2$start[i])]
+  
+}
+
+# clean
 fates.3 <- fates.2 %>%
   
-  # select
+  # select columns we want
   dplyr::select(Site,
                 Animal.ID,
                 Ear.tag,
                 Collar.type,
                 Sex,
                 Event.type,
+                General.cause,
+                Specific.cause,
                 start,
                 end,
-                mort,
-                cens) %>%
+                mort.pred,
+                mort.oth,
+                cens,
+                week) %>%
   
-  # create numeric week variable (back-transform)
-  mutate(week = as.numeric(format(as.Date(end + date.origin, 
-                                          origin = "1970-01-01"), 
-                                  "%W"))) %>%
-  
-  # replace 0 weeks with 52, add year variable
-  mutate(week = ifelse(week == 0, 
-                       52, 
-                       week),
-         
-         year = ifelse(end < 366,
-                       2022,
-                       ifelse(end > 730,
-                              2024,
-                              2023))) %>%
-  
-  # remove event type and start/end variables
-  dplyr::select(-c(Event.type))
+  # add year variable (from day.lookup)
+  mutate(year = case_when(end < 93 ~ 2022,
+                          end > 92 & end < 458 ~ 2023,
+                          end > 457 & end < 824 ~ 2024,
+                          end > 823 ~ 2025))
 
 #_______________________________________________________________________________________________
 # 6. Attribute covariate values to each individual/week observation ----
@@ -428,8 +484,8 @@ fates.6 <- fates.5
 # compared to control (i.e., the intercept), while also accounting for pre- and post-treatment
 # sensu Abele et al. (2013)
 
-# week 40 for 2A, 2B, 3A, and 3B
-# week 41 for 1A, 1B, 4A, and 4B
+# week 1 for 2A, 2B, 3A, and 3B
+# week 2 for 1A, 1B, 4A, and 4B
 
 fates.6$post.trt <- NA
 fates.6$trt.ret <- NA
@@ -438,20 +494,23 @@ fates.6$trt.pil <- NA
 # assign 0 for pre-treatment and 1 for post-treatment
 # 2 and 3
 fates.6$post.trt[fates.6$Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
-                 fates.6$week < 40 &
+                 fates.6$week > 14 &
                  fates.6$year == 2023] <- 0
 
 fates.6$post.trt[fates.6$Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
-                 fates.6$week >= 40 &
+                 fates.6$week >= 1 &
+                 fates.6$week <= 14 &
                  fates.6$year == 2023] <- 1
 
 # 1 and 4
 fates.6$post.trt[fates.6$Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
-                 fates.6$week < 41 &
+                 fates.6$week > 14 &
+                 fates.6$week == 1 &
                  fates.6$year == 2023] <- 0
 
 fates.6$post.trt[fates.6$Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
-                 fates.6$week >= 41 &
+                 fates.6$week >= 2 &
+                 fates.6$week <= 14 &
                  fates.6$year == 2023] <- 1
 
 # all remaining NAs should be 1
@@ -485,10 +544,10 @@ fates.6$PC1 <- (fates.6$Mass.1 + fates.6$HFL.1) / 2
 
 # divide mass by HFL to create a body condition index uncorrelated with either variable
 fates.6$BCI <- fates.6$Mass.1 / fates.6$HFL.1
-fates.6$BCI.1 <- scale(fates.6$BCI)
+fates.6$BCI.1 <- as.numeric(scale(fates.6$BCI))
 
 #_______________________________________________________________________________________________
 # 11. Write to csv ----
 #_______________________________________________________________________________________________
 
-write.csv(fates.6, "Cleaned data/fates_cleaned_12_03_2024.csv")
+write.csv(fates.6, "Cleaned data/fates_cleaned_01_02_2025.csv")
