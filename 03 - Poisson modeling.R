@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
 # Date completed: 29 Dec 2023
-# Date last modified: 03 Dec 2024
+# Date last modified: 06 Jan 2025
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -21,7 +21,7 @@ library(mgcv)            # cyclic splines
 # 2. Read in and format data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Cleaned data/fates_cleaned_12_03_2024.csv")
+fates <- read.csv("Cleaned data/fates_cleaned_01_02_2025.csv")
 
 # keep only columns we need for modeling
 fates.1 <- fates %>% dplyr::select(cluster,
@@ -29,7 +29,8 @@ fates.1 <- fates %>% dplyr::select(cluster,
                                    Ear.tag,
                                    week,
                                    year,
-                                   mort,
+                                   mort.pred,
+                                   mort.oth,
                                    cens,
                                    Collar.type.1,
                                    Sex.1,
@@ -43,9 +44,10 @@ fates.1 <- fates %>% dplyr::select(cluster,
 
 #_______________________________________________________________________________________________
 # 3. Construct basis functions for spline on hazard ----
-#_______________________________________________________________________________________________
 
 # procedure adapted from https://mc-stan.org/users/documentation/case-studies/splines_in_stan.html
+
+#_______________________________________________________________________________________________
 
 # define knots (quantile)
 n.knots <- 5 + 1
@@ -69,12 +71,12 @@ basis.plot <- tibble(week = fates.1$week,
                      b5 = basis[ , 5]) %>%
               pivot_longer(cols = b1:b5)
 
+# plot
 ggplot(data = fates.1,
-       aes(x = week,
-           y = mort)) +
+       aes(x = week)) +
+  
   theme_bw() +
-  geom_jitter(alpha = 0.1,
-              height = 0.01) +
+  
   geom_line(data = basis.plot,
             aes(x = week,
                 y = value,
@@ -87,7 +89,8 @@ ggplot(data = fates.1,
 #_______________________________________________________________________________________________
 
 fates.stan.1 <- list(N = nrow(fates.1),
-                     y_mort = fates.1$mort,
+                     y_mort_pred = fates.1$mort.pred,
+                     y_mort_oth = fates.1$mort.oth,
                      y_cens = fates.1$cens,
                      t = fates.1$week,
                      collar = fates.1$Collar.type.1,
@@ -182,6 +185,35 @@ plot(m3, pars = c("w0"))
 plot(m3, pars = c("b_sex", "b_ret", "b_pil", "b_mas", "b_hfl", "b_bci"))
 plot(m3, pars = c("b_col"))
 
+
+# for these interactive effects, calculate the "total coefficient" as:
+# (b_ret * ret) + (b_trt_r * trt * ret), etc. 
+
+# show these effects as "before-after" plots
+
+#_______________________________________________________________________________________________
+# 8. Three likelihoods ----
+#_______________________________________________________________________________________________
+
+m4 <- rstan::stan(
+  
+  file = "m4.stan",
+  data = fates.stan.1,
+  chains = 1,
+  warmup = 1000,
+  iter = 2000
+  
+)
+
+print(m4)
+
+# estimates
+plot(m4, pars = c("w0_pred"))
+plot(m4, pars = c("bpred_sex", "bpred_mas", "bpred_hfl", "bpred_bci"))
+plot(m4, pars = c("bcens_col"))
+
+plot(m4, pars = c("bpred_ret", "bpred_trt_r"))
+plot(m4, pars = c("bpred_pil", "bpred_trt_p"))
 
 # for these interactive effects, calculate the "total coefficient" as:
 # (b_ret * ret) + (b_trt_r * trt * ret), etc. 

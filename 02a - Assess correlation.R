@@ -1,11 +1,11 @@
 # Project: WSU Snowshoe Hare and PCT Project
 # Subproject: Survival and hazard modeling
-# Script: 02a - Assess multicollinearity
+# Script: 02a - Assess correlation
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 08 Jan 2024
 # Date completed: 08 Jan 2024
-# Date last modified: 03 Dec 2024
+# Date last modified: 06 Jan 2024
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -18,10 +18,10 @@ library(tidyverse)       # manipulate and clean data
 # 2. Read in and format data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Cleaned data/fates_cleaned_12_03_2024.csv")
+fates <- read.csv("Cleaned data/fates_cleaned_01_02_2025.csv")
 
 #_______________________________________________________________________________________________
-# 3. Examine potential multicollinearity ----
+# 3. Examine correlation ----
 #_______________________________________________________________________________________________
 # 3a. Relationship between sex and morphometry ----
 #_______________________________________________________________________________________________
@@ -66,7 +66,7 @@ ggplot() +
               fill = "darkgray",
               alpha = 0.25)
 
-# here the female intercept and slope is higher
+# here the female intercept
 
 # let's run the regression out of curiosity
 sex.reg <- lm(data = fates,
@@ -74,7 +74,7 @@ sex.reg <- lm(data = fates,
 
 summary(sex.reg)
 
-# this is pretty convincing evidence that sex and HFL can reliably predict 
+# sex and HFL do a decent job of predicting mass
 # trends in mass
 
 # correlation between covariates
@@ -84,13 +84,15 @@ cor.test(x = fates$Mass.1,
          method = "pearson")
 
 # this is a somewhat strong correlation
+# 0.47
 
 # mass and sex
 cor.test(x = fates$Mass.1, 
          y = fates$Sex.1,
          method = "pearson")
 
-# slightly weaker
+# weaker
+# -0.23
 
 # hfl and sex
 cor.test(x = fates$HFL.1, 
@@ -98,17 +100,7 @@ cor.test(x = fates$HFL.1,
          method = "pearson")
 
 # very weak
-
-
-
-# variance inflation factors (general Poisson regression)
-vif.model <- glm(mort ~ Sex.1 + trt.ret + trt.pil + Mass.1 + HFL.1,
-                 data = fates,
-                 family = poisson)
-
-car::vif(vif.model)
-
-# we see somewhat elevated VIFs for mass and hfl (in the basic Poisson glm)
+# -0.03
 
 #_______________________________________________________________________________________________
 # 3b. Principal components for hare size ----
@@ -120,12 +112,15 @@ cor(x = fates[ ,c("Mass.1", "HFL.1", "Sex.1", "PC1")],
 
 # here each variable is correlated the same to the first PC
 # so it captures much of the variability both variables
+# 0.86
 
 #_______________________________________________________________________________________________
 # 4. Body condition indices ----
 
 # I looked at the residual BCI (from Murray 2002) and it was highly (r = 0.89)
 # correlated to mass
+
+# instead, we'll use mass / HFL (BCI below)
 
 #_______________________________________________________________________________________________
 
@@ -134,6 +129,6 @@ cor(x = fates[ ,c("Mass.1", "HFL.1", "Sex.1", "PC1", "BCI")],
     method = "pearson")
 
 # TENTATIVE CONCLUSIONS
-# Include the body size synthetic variable (PC1)
+# Maybe include the body size synthetic variable (PC1)
 # Body condition index (BCI)
 # And MAYBE sex as it is less strongly correlated to PC1 than mass
