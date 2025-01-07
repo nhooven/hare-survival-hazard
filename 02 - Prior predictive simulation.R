@@ -15,7 +15,7 @@
 library(tidyverse)
 
 #_______________________________________________________________________________________________
-# 2. Baseline hazard ----
+# 2. Baseline hazard (old) ----
 #_______________________________________________________________________________________________
 
 # Initial runs of the model with our data suggest that it struggles to estimate a constant
@@ -77,3 +77,104 @@ ggplot() +
                color = "red")
 
 # this looks better - let's give it a shot in the model!
+
+#_______________________________________________________________________________________________
+# 3. Baseline hazard (spline with partial pooling) ----
+
+# reference : https://www.tjmahr.com/random-effects-penalized-splines-same-thing/
+
+# here we can learn a smoothing parameter, lambda, which can scale
+# non-centered scaling factors for each w0 to control their smoothing level
+# i.e., how shrunk they are toward zero.
+# this constrains the w0 terms just like a skeptical prior BUT
+# allows for partial pooling so they can learn from each other, rather
+# than being fully independent
+
+#_______________________________________________________________________________________________
+# 3a. Toy example ----
+
+library(mgcv)
+
+#_______________________________________________________________________________________________
+
+# create a synthetic dataset
+weeks <- seq(1, 52, length.out = 100)
+
+# define knots (quantile)
+n.knots <- 15 + 1
+
+knot.list <- quantile(weeks, 
+                      probs = seq(from = 0, 
+                                  to = 1, 
+                                  length.out = n.knots))
+
+# creating the basis matrix (cyclic spline)
+basis <- cSplineDes(weeks,
+                    knots = knot.list,
+                    ord = 4)                # cubic
+
+# create some spline weights that are drawn from the same distribution,
+# given some underlying factor (the non-centered scaling factor z)
+z <- rnorm(n = n.knots - 1, mean = 0, sd = 1)
+
+# define a sigma
+sigma <- 0.25
+
+# calculate spline weights
+w0 <- sigma * z
+
+# convert to vector for multiplication
+w0.mat <- t(as.matrix(as.numeric(w0)))
+
+# multiply with 'sweep'
+w0.by.b <- sweep(basis, 2, w0, `*`)
+
+# sum to create spline prediction
+w0.by.b.sum <- apply(w0.by.b, 1, sum)
+
+# create df to hold predictions
+spline.pred.df <- data.frame(x = weeks,
+                             y = w0.by.b.sum)
+
+# plot
+ggplot(spline.pred.df,
+       aes(x = x,
+           y = y)) +
+  
+  geom_point()
+
+# what if we want to introduce a smoothing penalty?
+# if lambda = 1, then there is no smoothing
+# if lambda > 1, then smoothing is introduced
+lambda <- 3
+
+# calculate penalized weights
+w0.penalized <- c(sigma * z[1] / lambda,
+                  sigma * z[2] / lambda,
+                  sigma * z[3] / lambda,
+                  sigma * z[4] / lambda,
+                  sigma * z[5] / lambda)
+
+# convert to vector for multiplication
+w0.penalized.mat <- t(as.matrix(as.numeric(w0.penalized)))
+
+# multiply with 'sweep'
+w0.penalized.by.b <- sweep(basis, 2, w0.penalized, `*`)
+
+# sum to create spline prediction
+w0.penalized.by.b.sum <- apply(w0.penalized.by.b, 1, sum)
+
+spline.pred.df$y.penalized <- w0.penalized.by.b.sum
+
+# plot
+ggplot(spline.pred.df) +
+  
+  theme_bw() + 
+  
+  geom_point(aes(x = x,
+                 y = y),
+             color = "orange") +
+  
+  geom_point(aes(x = x,
+                 y = y.penalized),
+             color = "purple")
