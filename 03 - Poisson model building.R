@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
 # Date completed: 29 Dec 2023
-# Date last modified: 10 Jan 2025
+# Date last modified: 21 Jan 2025
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -42,7 +42,7 @@ fates.1 <- fates %>% dplyr::select(cluster,
 #_______________________________________________________________________________________________
 
 # define knots (quantile)
-n.knots <- 5 + 1
+n.knots <- 8 + 1
 
 knot.list <- quantile(fates.1$week, 
                       probs = seq(from = 0, 
@@ -63,8 +63,11 @@ basis.plot <- tibble(week = fates.1$week,
                      b2 = basis[ , 2],
                      b3 = basis[ , 3],
                      b4 = basis[ , 4],
-                     b5 = basis[ , 5]) %>%
-  pivot_longer(cols = b1:b5)
+                     b5 = basis[ , 5],
+                     b6 = basis[ , 6],
+                     b7 = basis[ , 7],
+                     b8 = basis[ , 8]) %>%
+  pivot_longer(cols = b1:b8)
 
 # plot
 ggplot(data = fates.1,
@@ -156,8 +159,65 @@ plot(m.spline, pars = "zw_pred")
 
 # plot spline
 plot_spline(seq(1, 52, length.out = 100),
-            -3.86,
-            c(0.20, -0.65, -0.16, -0.68, -0.31))
+            -3.85,
+            c(0.24, -0.72, -0.14, -0.75, -0.32))
+
+#_______________________________________________________________________________________________
+# 5c. Run model (sum-to-zero constraint) ----
+#_______________________________________________________________________________________________
+
+m.spline.stz <- rstan::stan(
+  
+  file = "model_spline_test_stz.stan",
+  data = fates.stan.1,
+  chains = 1,
+  warmup = 1000,
+  iter = 2000
+  
+)
+
+print(m.spline.stz)
+
+plot(m.spline.stz, pars = "w0_pred")
+plot(m.spline, pars = "w0_pred")
+
+# plot spline
+plot_spline(seq(1, 52, length.out = 100),
+            -4.16,
+            c(0.36, -0.26, 0.10, -0.31, -0.02))
+
+# looks like both the penalty term and the sum-to-zero constraint keeps the spline
+# weights pretty close to zero. Let's examine more knots since we might be interested
+# in some more flexibility
+
+#_______________________________________________________________________________________________
+# 5d. Run model (sum-to-zero constraint, more knots) ----
+#_______________________________________________________________________________________________
+
+m.spline.2 <- rstan::stan(
+  
+  file = "model_spline_test_stz.stan",
+  data = fates.stan.1,
+  chains = 1,
+  warmup = 1000,
+  iter = 2000
+  
+)
+
+print(m.spline.2)
+
+plot(m.spline.2, pars = "w0_pred")
+plot(m.spline, pars = "w0_pred")
+
+# plot spline
+plot_spline(seq(1, 52, length.out = 100),
+            -4.19,
+            c(0.11, -0.59, 0.33, 0.00, -0.50, 0.03, -0.19, 0.73))
+
+# we add a little bit of complexity here with three more basis functions
+# we could always compare different formulations with WAIC or something similar
+
+
 
 
 
