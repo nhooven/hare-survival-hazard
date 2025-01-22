@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 21 Jan 2025
 # Date completed: 21 Jan 2025
-# Date last modified: 21 Jan 2025
+# Date last modified: 22 Jan 2025
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -675,6 +675,8 @@ ggplot(data = fates.oth,
 #_______________________________________________________________________________________________
 # 7. All events - faceted by treatment ----
 #_______________________________________________________________________________________________
+# 7a. Clean data ----
+#_______________________________________________________________________________________________
 
 # bind together
 fates.all <- rbind(fates.censor[ , 1:16], fates.pred[ , 1:16], fates.oth[ , 1:16])
@@ -691,6 +693,10 @@ fates.all$Event <- factor(fates.all$Event,
                           levels = c("Censor",
                                      "Predation",
                                      "Other mortality"))
+
+#_______________________________________________________________________________________________
+# 7b. Weekly ----
+#_______________________________________________________________________________________________
 
 ggplot(data = fates.all,
        aes(x = study.year.week,
@@ -748,3 +754,84 @@ ggplot(data = fates.all,
   
   # and scale y axis correctly
   scale_y_continuous(breaks = 1:6)
+
+#_______________________________________________________________________________________________
+# 7c. Monthly ----
+#_______________________________________________________________________________________________
+
+fates.all.month <- fates.all %>%
+  
+  mutate(month = substr(Estimated.event.date, 1, 7)) %>%
+  
+  # add identifier by cluster groups
+  mutate(cluster.group = factor(ifelse(cluster == 4,
+                                       "Low",
+                                       "High")))
+
+# plot
+ggplot(data = fates.all.month,
+       aes(x = month,
+           fill = cluster.group)) +
+  
+  # facet
+  facet_grid(trt ~ Event) +
+  
+  # white background
+  theme_bw() +
+  
+  # vertical line for treatment
+  geom_vline(xintercept = "2023-10",
+             linetype = "dashed") +
+  
+  # count bars
+  geom_bar(stat = "count",
+           color = "black") +
+  
+  # y axis title
+  ylab("Number of events") +
+  
+  # fill label
+  labs(fill = "Cluster group") +
+  
+  # colors
+  scale_fill_viridis_d(direction = -1,
+                       option = "mako",
+                       begin = 0.3, 
+                       end = 1) +
+  
+  # theme arguments
+  theme(
+    # remove gridlines
+    panel.grid = element_blank(),
+    
+    # adjust axis text
+    axis.text.x = element_text(angle = 270,
+                               vjust = 0.25),
+    
+    # remove x axis title
+    axis.title.x = element_blank(),
+    
+    # legend position
+    legend.position = "top",
+    
+    # legend size
+    legend.key.size = unit(0.35, "cm"),
+    
+    # strip text justification
+    strip.text = element_text(hjust = 0)
+    
+  ) +
+  
+  # sensible week breaks and labels
+  scale_x_discrete(breaks = c("2022-10", "2023-02", "2023-06", 
+                              "2023-10", "2024-02", "2024-06", 
+                              "2024-10"),
+                   labels = c("2022-10", "2023-02", "2023-06", 
+                              "2023-10", "2024-02", "2024-06", 
+                              "2024-10")) +
+  
+  # coordinates
+  coord_cartesian(ylim = c(0.33, 4)) +
+  
+  # and scale y axis correctly
+  scale_y_continuous(breaks = 1:4)
