@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
 # Date completed: 29 Dec 2023
-# Date last modified: 06 Jan 2025
+# Date last modified: 22 Jan 2025
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -14,8 +14,7 @@
 
 library(tidyverse)       # manipulate and clean data
 library(rstan)           # modeling with Stan
-library(splines)         # construct basic functions
-library(mgcv)            # cyclic splines
+library(mgcv)            # construct basis functions for cyclic splines
 
 #_______________________________________________________________________________________________
 # 2. Read in and format data ----
@@ -40,7 +39,12 @@ fates.1 <- fates %>% dplyr::select(cluster,
                                    BCI.1,
                                    post.trt,
                                    trt.ret,
-                                   trt.pil)
+                                   trt.pil) %>%
+  
+  # create "mort" variable (since most morts are predation or unknown)
+  mutate(mort = ifelse(mort.pred == 1 | mort.oth == 1,
+                       1,
+                       0))
 
 #_______________________________________________________________________________________________
 # 3. Construct basis functions for spline on hazard ----
@@ -50,55 +54,72 @@ fates.1 <- fates %>% dplyr::select(cluster,
 #_______________________________________________________________________________________________
 
 # define knots (quantile)
-n.knots <- 5 + 1
+n.knots <- 7 + 1
 
 knot.list <- quantile(fates.1$week, 
                       probs = seq(from = 0, 
                                   to = 1, 
                                   length.out = n.knots))
 
-# creating the basis matrix (cyclic spline)
+# create the basis matrix (cyclic spline)
 basis <- cSplineDes(fates.1$week,
                     knots = knot.list,
                     ord = 4)                # cubic
 
-# plot basis functions
-basis.plot <- tibble(week = fates.1$week,
-                     b1 = basis[ , 1],
-                     b2 = basis[ , 2],
-                     b3 = basis[ , 3],
-                     b4 = basis[ , 4],
-                     b5 = basis[ , 5]) %>%
-              pivot_longer(cols = b1:b5)
+#_______________________________________________________________________________________________
+# 4. Examine correlation between variables ----
+#_______________________________________________________________________________________________
+# 4a. Continuous covariates ----
+#_______________________________________________________________________________________________
 
-# plot
-ggplot(data = fates.1,
-       aes(x = week)) +
-  
-  theme_bw() +
-  
-  geom_line(data = basis.plot,
-            aes(x = week,
-                y = value,
-                group = name),
-            linewidth = 1.5,
-            alpha = 0.25)
+round(cor(fates[ , c("Mass.1", "HFL.1", "PC1", "BCI.1")]), digits = 3)
+
+plot(fates[ , c("Mass.1", "HFL.1", "PC1", "BCI.1")])
+
+# yep, these are strange, definitely issues with orthogonality if we include BCI
+
+# we'll start with mass and HFL
 
 #_______________________________________________________________________________________________
-# 4. Build data list ----
+# 4b. Sex and morphometrics ----
+#_______________________________________________________________________________________________
+
+kruskal.test(Mass.1 ~ Sex.1, data = fates)    # different mass by sex
+mean(fates$Mass.1[fates$Sex.1 == 1])          # male
+mean(fates$Mass.1[fates$Sex.1 == 0])          # female
+
+kruskal.test(HFL.1 ~ Sex.1, data = fates)     # not different HFL by sex
+
+plot(fates[ , c("Mass.1", "HFL.1", "Sex.1")])
+
+# these are statistically different, but are they biologically meaningful? 
+
+#_______________________________________________________________________________________________
+# 4c. Treatment and morphometrics ----
+#_______________________________________________________________________________________________
+
+kruskal.test(Mass.1 ~ post.trt, data = fates)    # slightly different mass by treatment status
+mean(fates$Mass.1[fates$post.trt == 0])          # pre
+mean(fates$Mass.1[fates$post.trt == 1])          # post
+
+kruskal.test(HFL.1 ~ post.trt, data = fates)     # different HFL by treatment status
+
+plot(fates[ , c("Mass.1", "HFL.1", "post.trt")])
+
+# difficult to test differences with interactions, let's keep them for now
+
+#_______________________________________________________________________________________________
+# 5. Build data list ----
 #_______________________________________________________________________________________________
 
 fates.stan.1 <- list(N = nrow(fates.1),
-                     y_mort_pred = fates.1$mort.pred,
-                     y_mort_oth = fates.1$mort.oth,
+                     y_mort = fates.1$mort,
                      y_cens = fates.1$cens,
                      t = fates.1$week,
                      collar = fates.1$Collar.type.1,
                      sex = fates.1$Sex.1,
                      mas = fates.1$Mass.1,
                      hfl = fates.1$HFL.1,
-                     bsz = fates.1$PC1,
-                     bci = fates.1$BCI,
                      trt = fates.1$post.trt,
                      ret = fates.1$trt.ret,
                      pil = fates.1$trt.pil,
@@ -108,12 +129,12 @@ fates.stan.1 <- list(N = nrow(fates.1),
                      nbasis = ncol(basis))
 
 #_______________________________________________________________________________________________
-# 5. Run first model (random intercept for cluster) ----
+# 6. Fit model ----
 #_______________________________________________________________________________________________
 
-m1 <- rstan::stan(
+hazard_model <- rstan::stan(
   
-  file = "m1.stan",
+  file = "hazard_model.stan",
   data = fates.stan.1,
   chains = 1,
   warmup = 1000,
@@ -121,104 +142,50 @@ m1 <- rstan::stan(
   
 )
 
-print(m1)
+print(hazard_model, pars = c("b_ret",
+                             "b_trt_ret",
+                             "b_pil",
+                             "b_trt_pil"))
 
-# estimates
-plot(m1, pars = c("b_sex", "b_ret", "b_pil", "b_trt_r", "b_trt_p", "b_mas", "b_hfl", "b_bci"))
-plot(m1, pars = c("a_c1", "a_c2", "a_c3", "a_c4"))
+plot(hazard_model, pars = c("b_trt_ret"))
 
-# trace
-traceplot(m1, pars = c("b_sex", "b_ret", "b_pil", "b_trt_r", "b_trt_p", "b_mas", "b_hfl", "b_bci"))
-traceplot(m1, pars = c("a_c1", "a_c2", "a_c3", "a_c4"))
+traceplot(hazard_model, pars = c("a0_mean"))
 
-#_______________________________________________________________________________________________
-# 6. Run second model (censoring likelihood) ----
-#_______________________________________________________________________________________________
+# 01-23-2025: Not really any evidence that the censoring rate differs between clusters
+# let's full pool this
 
-m2 <- rstan::stan(
-  
-  file = "m2.stan",
-  data = fates.stan.1,
-  chains = 4,
-  warmup = 1000,
-  iter = 2000
-  
-)
+# penalized spline coefficients look pretty good, definitely some variability between sites
 
-print(m2)
+# and now - for the coefficients!
 
-# estimates
-plot(m2, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
-plot(m2, pars = c("hr_col"))
+# coefs look good! let's calculate the total treatments
+# ret
+data.frame(wrabbit = round(exp(c(-0.54, -0.54 + 0.58)), digits = 3),
+           crazy = round(exp(c(-0.63, -0.63 + 0.48)), digits = 3),
+           juice = round(exp(c(-0.70, -0.70 + 0.47)), digits = 3),
+           chop = round(exp(c(-0.70, -0.70 + 0.40)), digits = 3))
 
-# trace
-traceplot(m2, pars = c("hr_sex", "hr_ret", "hr_pil", "hr_mas", "hr_hfl", "hr_bci"))
-traceplot(m2, pars = c("cens0", "hr_col"))
+# ret
+data.frame(wrabbit = round(exp(c(-1.08, -1.08 + 1.48)), digits = 3),
+           crazy = round(exp(c(-1.22, -1.22 + 1.27)), digits = 3),
+           juice = round(exp(c(-1.21, -1.21 + 1.39)), digits = 3),
+           chop = round(exp(c(-1.14, -1.14 + 1.41)), digits = 3))
 
-#_______________________________________________________________________________________________
-# 7. Run third model (censoring likelihood, constraining spline weights even more) ----
-#_______________________________________________________________________________________________
+# and look at the partially pooled mean
+plot(hazard_model, pars = c("b_ret_mean",
+                            "b_trt_ret_mean",
+                            "b_pil_mean",
+                            "b_trt_pil_mean"))
 
-# here we need to balance (1) the seasonal variance in hazard accounted for by
-# the spline and (2) the variance attributable to covariates
+print(hazard_model, pars = c("b_ret_mean",
+                             "b_trt_ret_mean",
+                             "b_pil_mean",
+                             "b_trt_pil_mean"))
 
-# initial N(0, 1) priors for spline weights were very uncertain and led to 
-# a large spike in spring mortality
-# balancing the magnitude and spread of these coefficients will be important
-# for inference - we don't want to overfit! 
-# more skeptical priors should draw our spline function closer to zero
+# next: add hazard ratios and total effect (hazard ratio) for treatment effects
+# in generated quantities
+# AND tune priors!
 
-m3 <- rstan::stan(
-  
-  file = "m3.stan",
-  data = fates.stan.1,
-  chains = 1,
-  warmup = 1000,
-  iter = 2000
-  
-)
-
-print(m3)
-
-# estimates
-plot(m3, pars = c("w0"))
-plot(m3, pars = c("b_sex", "b_ret", "b_pil", "b_mas", "b_hfl", "b_bci"))
-plot(m3, pars = c("b_col"))
-
-
-# for these interactive effects, calculate the "total coefficient" as:
-# (b_ret * ret) + (b_trt_r * trt * ret), etc. 
-
-# show these effects as "before-after" plots
-
-#_______________________________________________________________________________________________
-# 8. Three likelihoods ----
-#_______________________________________________________________________________________________
-
-m4 <- rstan::stan(
-  
-  file = "m4.stan",
-  data = fates.stan.1,
-  chains = 1,
-  warmup = 1000,
-  iter = 2000
-  
-)
-
-print(m4)
-
-# estimates
-plot(m4, pars = c("w0_pred"))
-plot(m4, pars = c("bpred_sex", "bpred_mas", "bpred_hfl", "bpred_bci"))
-plot(m4, pars = c("bcens_col"))
-
-plot(m4, pars = c("bpred_ret", "bpred_trt_r"))
-plot(m4, pars = c("bpred_pil", "bpred_trt_p"))
-
-# for these interactive effects, calculate the "total coefficient" as:
-# (b_ret * ret) + (b_trt_r * trt * ret), etc. 
-
-# show these effects as "before-after" plots
 
 #_______________________________________________________________________________________________
 # 7. Save image ----

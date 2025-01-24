@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
 # Date completed: 29 Dec 2023
-# Date last modified: 21 Jan 2025
+# Date last modified: 22 Jan 2025
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -42,7 +42,7 @@ fates.1 <- fates %>% dplyr::select(cluster,
 #_______________________________________________________________________________________________
 
 # define knots (quantile)
-n.knots <- 8 + 1
+n.knots <- 5 + 1
 
 knot.list <- quantile(fates.1$week, 
                       probs = seq(from = 0, 
@@ -135,7 +135,9 @@ plot_spline <- function (weeks.pred,
     
     theme_bw() + 
     
-    geom_point(color = "purple") 
+    geom_point(color = "purple") +
+    
+    coord_cartesian(ylim = c(0, 0.04))
   
 }
 
@@ -217,7 +219,126 @@ plot_spline(seq(1, 52, length.out = 100),
 # we add a little bit of complexity here with three more basis functions
 # we could always compare different formulations with WAIC or something similar
 
+#_______________________________________________________________________________________________
+# 5e. The big one - hierarchical random effects for baseline hazard ----
+#_______________________________________________________________________________________________
 
+m.spline.3 <- rstan::stan(
+  
+  file = "model_spline_test_hierarchical.stan",
+  data = fates.stan.1,
+  chains = 1,
+  warmup = 50,
+  iter = 100
+  
+)
 
+print(m.spline.3,
+      pars = c("a0_mean",
+               "a0_sigma",
+               "a0_z",
+               "w_pen",
+               "l"))
 
+plot(m.spline.3, pars = "l")
 
+# define plot_spline function to show all on the same plot
+plot_spline_hier <- function (weeks.pred,          # what to predict on
+                              spline.intercepts,   # list of intercepts
+                              spline.coefs) {      # list of coefficients
+  
+  # prediction basis function
+  basis.pred <- cSplineDes(weeks.pred,
+                           knots = knot.list,
+                           ord = 4)
+  
+  # loop through
+  spline.preds.df <- data.frame()
+  
+  for (i in 1:4) {
+    
+    # subset lists
+    spline.intercept <- spline.intercepts[[i]]
+    spline.coef <- spline.coefs[[i]]
+    
+    # convert to vector for multiplication
+    w0.penalized.mat <- t(as.matrix(as.numeric(spline.coef)))
+    
+    # multiply with 'sweep'
+    w0.penalized.by.b <- sweep(basis.pred, 2, w0.penalized.mat, `*`)
+    
+    # sum to create spline prediction
+    w0.penalized.by.b.sum <- rowSums(w0.penalized.by.b)
+    
+    # add to intercept and exponentiate
+    spline.pred <- exp(spline.intercept + w0.penalized.by.b.sum)
+    
+    # data.frame
+    spline.pred.df <- data.frame(x = weeks.pred,
+                                 y = spline.pred,
+                                 cluster = i)
+    
+    # bind in to master df
+    spline.preds.df <- rbind(spline.preds.df, spline.pred.df)
+    
+  }
+  
+  # plot
+  ggplot(spline.preds.df,
+         aes(x = x,
+             y = y,
+             color = as.factor(cluster))) +
+    
+    theme_bw() + 
+    
+    geom_line(linewidth = 1.5) +
+    
+    coord_cartesian(ylim = c(0, 0.04))
+  
+}
+
+# plot mean spline predictions
+plot_spline_hier(seq(1, 52, length.out = 100),
+                 list(-4.18 + (0.18 * -0.47),
+                      -4.18 + (0.18 * 0.03),
+                      -4.18 + (0.18 * -0.81),
+                      -4.18 + (0.18 * -0.08)),
+                 list(c(0.90, -0.26, 0.84, -0.23, -0.00),
+                      c(0.49, -0.19, 0.12, -0.39, -0.05),
+                      c(-0.40, -0.20, 0.44, -0.40, 0.10),
+                      c(0.85, -0.48, -0.95, -0.77, 0.70))) 
+
+# 01-22-2025: And it works! This will be straightforward to include covariate effects,
+# might as well implement random slopes on all of those to fully account for cluster effects
+
+# I feel good about moving forward now (forget the fact that this model takes a hot minute to
+# sample - there's a lot of parameters in this thing)
+
+#_______________________________________________________________________________________________
+# 8. Three likelihoods ----
+#_______________________________________________________________________________________________
+
+m4 <- rstan::stan(
+  
+  file = "m4.stan",
+  data = fates.stan.1,
+  chains = 1,
+  warmup = 1000,
+  iter = 2000
+  
+)
+
+print(m4)
+
+# estimates
+plot(m4, pars = c("w0_pred"))
+plot(m4, pars = c("bpred_sex", "bpred_mas", "bpred_hfl", "bpred_bci"))
+plot(m4, pars = c("bcens_col"))
+
+plot(m4, pars = c("bpred_ret", "bpred_trt_r"))
+plot(m4, pars = c("bpred_pil", "bpred_trt_p"))
+
+# for these interactive effects, calculate the "total coefficient" as:
+# (b_ret * ret) + (b_trt_r * trt * ret), etc. 
+
+# show these effects as "before-after" plots
