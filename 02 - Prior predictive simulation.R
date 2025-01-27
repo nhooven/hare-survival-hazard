@@ -178,3 +178,51 @@ ggplot(spline.pred.df) +
   geom_point(aes(x = x,
                  y = y.penalized),
              color = "purple")
+
+#_______________________________________________________________________________________________
+# 4. Baseline hazard intercept (gamma distribution) ----
+
+# initially, I was using a normal distribution with a log(prior guess at baseline hazard)
+# for the a0_mean intercept prior. It seems I should re-parameterize this as a gamma
+# distribution since it more naturally models the Poisson parameter for the baseline hazard
+
+#_______________________________________________________________________________________________
+
+# I want the expectation to be 0.01, very reasonable
+1 - exp(-0.01) # about a 1% chance of dying on average
+
+# the mean of the gamma is shape / rate
+
+# and the SD is sqrt(shape / rate^2)
+
+# so to translate a "log"-scaled gamma, the mean is:
+log(0.01)
+
+# and its SD can be:
+1
+
+# so the exponential-scaled version is: ~ N(0.01, 2.72)
+# and the gamma parameters must be:
+# 0.01 = shape / rate
+# e = sqrt(shape / rate^2)
+
+# and now after solving the system of equations:
+exp.norm.mean <- 0.01
+exp.norm.sd <- exp(1)
+
+gam.shape <- exp.norm.mean^2 / exp.norm.sd^2
+gam.rate <- exp.norm.mean / exp.norm.sd^2
+
+# how does this look?
+ggplot(data = data.frame(x = seq(0, 1, length.out = 1000),
+                         y = dgamma(x = seq(0, 1, length.out = 1000),
+                                    shape = gam.shape,
+                                    rate = gam.rate)),
+       aes(x = log(x),
+           y = y)) +
+  
+  geom_line() +
+  
+  coord_cartesian(xlim = c(-10, 0.25))
+
+# I'm doing something wrong - we'll come back to this, but for now I think my current parameterization is fine

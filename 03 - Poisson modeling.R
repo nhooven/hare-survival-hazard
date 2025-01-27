@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 03 Dec 2023
 # Date completed: 29 Dec 2023
-# Date last modified: 22 Jan 2025
+# Date last modified: 24 Jan 2025
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -94,6 +94,9 @@ plot(fates[ , c("Mass.1", "HFL.1", "Sex.1")])
 
 # these are statistically different, but are they biologically meaningful? 
 
+# Following Abele et al. (2013), maybe let's keep mass out and keep sex and hfl, since
+# they are less related
+
 #_______________________________________________________________________________________________
 # 4c. Treatment and morphometrics ----
 #_______________________________________________________________________________________________
@@ -103,6 +106,8 @@ mean(fates$Mass.1[fates$post.trt == 0])          # pre
 mean(fates$Mass.1[fates$post.trt == 1])          # post
 
 kruskal.test(HFL.1 ~ post.trt, data = fates)     # different HFL by treatment status
+mean(fates$HFL.1[fates$post.trt == 0])           # pre
+mean(fates$HFL.1[fates$post.trt == 1])           # post
 
 plot(fates[ , c("Mass.1", "HFL.1", "post.trt")])
 
@@ -132,63 +137,33 @@ fates.stan.1 <- list(N = nrow(fates.1),
 # 6. Fit model ----
 #_______________________________________________________________________________________________
 
-hazard_model <- rstan::stan(
+hazard.model <- rstan::stan(
   
   file = "hazard_model.stan",
   data = fates.stan.1,
-  chains = 1,
+  chains = 4,
   warmup = 1000,
-  iter = 2000
+  iter = 3000,
+  pars = c("w_sigma_mean",        # parameters to not include in output
+           "w_sigma_sigma",
+           "w_sigma_z",
+           "l_raw_mean",
+           "l_raw_sigma",
+           "l_raw_z",
+           "w_z", 
+           "h0_cens_norm",
+           "w_sigma"),
+  include = FALSE
   
 )
 
-print(hazard_model, pars = c("b_ret",
-                             "b_trt_ret",
-                             "b_pil",
-                             "b_trt_pil"))
+print(hazard.model)
 
-plot(hazard_model, pars = c("b_trt_ret"))
-
-traceplot(hazard_model, pars = c("a0_mean"))
-
-# 01-23-2025: Not really any evidence that the censoring rate differs between clusters
-# let's full pool this
-
-# penalized spline coefficients look pretty good, definitely some variability between sites
-
-# and now - for the coefficients!
-
-# coefs look good! let's calculate the total treatments
-# ret
-data.frame(wrabbit = round(exp(c(-0.54, -0.54 + 0.58)), digits = 3),
-           crazy = round(exp(c(-0.63, -0.63 + 0.48)), digits = 3),
-           juice = round(exp(c(-0.70, -0.70 + 0.47)), digits = 3),
-           chop = round(exp(c(-0.70, -0.70 + 0.40)), digits = 3))
-
-# ret
-data.frame(wrabbit = round(exp(c(-1.08, -1.08 + 1.48)), digits = 3),
-           crazy = round(exp(c(-1.22, -1.22 + 1.27)), digits = 3),
-           juice = round(exp(c(-1.21, -1.21 + 1.39)), digits = 3),
-           chop = round(exp(c(-1.14, -1.14 + 1.41)), digits = 3))
-
-# and look at the partially pooled mean
-plot(hazard_model, pars = c("b_ret_mean",
-                            "b_trt_ret_mean",
-                            "b_pil_mean",
-                            "b_trt_pil_mean"))
-
-print(hazard_model, pars = c("b_ret_mean",
-                             "b_trt_ret_mean",
-                             "b_pil_mean",
-                             "b_trt_pil_mean"))
-
-# next: add hazard ratios and total effect (hazard ratio) for treatment effects
-# in generated quantities
-# AND tune priors!
-
+print(hazard.model, pars = c("w_pen"))
+plot(hazard.model, pars = c("w_pen"))
 
 #_______________________________________________________________________________________________
-# 7. Save image ----
+# 7. Save file ----
 #_______________________________________________________________________________________________
 
-save.image("RData - final/poisson_model.RData")
+save(hazard.model, file = "RData - final/hazard_model.RData")

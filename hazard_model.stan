@@ -66,9 +66,9 @@ data {
   real<lower=0> b_sex_sigma ;
   vector[nclust] b_sex_z ;
   
-  real b_mas_mean ;
-  real<lower=0> b_mas_sigma ;
-  vector[nclust] b_mas_z ;
+  //real b_mas_mean ;
+  //real<lower=0> b_mas_sigma ;
+  //vector[nclust] b_mas_z ;
   
   real b_hfl_mean ;
   real<lower=0> b_hfl_sigma ;
@@ -131,7 +131,7 @@ data {
   // varying slope coefficients (by cluster)
   // intrinsic
   vector[nclust] b_sex ;
-  vector[nclust] b_mas ;
+  //vector[nclust] b_mas ;
   vector[nclust] b_hfl ;
   
   // treatment
@@ -143,7 +143,7 @@ data {
   for (i in 1:nclust) {
     
     b_sex[i] = b_sex_mean + (b_sex_sigma * b_sex_z[i]) ;
-    b_mas[i] = b_mas_mean + (b_mas_sigma * b_mas_z[i]) ;
+    //b_mas[i] = b_mas_mean + (b_mas_sigma * b_mas_z[i]) ;
     b_hfl[i] = b_hfl_mean + (b_hfl_sigma * b_hfl_z[i]) ;
     
     b_trt_ret[i] = b_trt_ret_mean + (b_trt_ret_sigma * b_trt_ret_z[i]) ;
@@ -181,38 +181,38 @@ data {
   
   // censoring
   h0_cens_norm ~ normal(log(0.01), 1) ;  // baseline hazard of censoring (0.01 baseline hazard)
-  b_col ~ normal(0, 2.5) ;               // coefficient for collar
+  b_col ~ cauchy(0, 2.5) ;               // coefficient for collar
   
   // coefficients (non-centered varying slopes)
   // intrinsic
-  b_sex_mean ~ normal(0, 2.5) ;
+  b_sex_mean ~ cauchy(0, 2.5) ;
   b_sex_sigma ~ exponential(1) ;
   b_sex_z ~ normal(0, 0.5) ;
   
-  b_mas_mean ~ normal(0, 2.5) ;
-  b_mas_sigma ~ exponential(1) ;
-  b_mas_z ~ normal(0, 0.5) ;
+  //b_mas_mean ~ normal(0, 2.5) ;
+  //b_mas_sigma ~ exponential(1) ;
+  //b_mas_z ~ normal(0, 0.5) ;
   
-  b_hfl_mean ~ normal(0, 2.5) ;
+  b_hfl_mean ~ cauchy(0, 2.5) ;
   b_hfl_sigma ~ exponential(1) ;
   b_hfl_z ~ normal(0, 0.5) ;
   
   // treatment
   // pre-post interaction coefficients
-  b_trt_ret_mean ~ normal(0, 2.5) ;
+  b_trt_ret_mean ~ cauchy(0, 2.5) ;
   b_trt_ret_sigma ~ exponential(1) ;
   b_trt_ret_z ~ normal(0, 0.5) ;
   
-  b_trt_pil_mean ~ normal(0, 2.5) ;
+  b_trt_pil_mean ~ cauchy(0, 2.5) ;
   b_trt_pil_sigma ~ exponential(1) ;
   b_trt_pil_z ~ normal(0, 0.5) ;
   
   // treatment coefficients
-  b_ret_mean ~ normal(0, 2.5) ;
+  b_ret_mean ~ cauchy(0, 2.5) ;
   b_ret_sigma ~ exponential(1) ;
   b_ret_z ~ normal(0, 0.5) ;
   
-  b_pil_mean ~ normal(0, 2.5) ;
+  b_pil_mean ~ cauchy(0, 2.5) ;
   b_pil_sigma ~ exponential(1) ;
   b_pil_z ~ normal(0, 0.5) ;
   
@@ -236,7 +236,7 @@ data {
       
       lambda_mort[i, j] = exp(a0_mean + (a0_sigma * a0_z[j]) + bw[i, j]) *  
                           exp(b_sex[j] * sex[i] +
-                              b_mas[j] * mas[i] +
+                              //b_mas[j] * mas[i] +
                               b_hfl[j] * mas[i] +
                               b_ret[j] * ret[i] + b_trt_ret[j] * trt[i] * ret[i] +
                               b_pil[j] * pil[i] + b_trt_pil[j] * trt[i] * pil[i]) ;
@@ -262,5 +262,27 @@ data {
       
   }
   
+  } 
+  
+  generated quantities {
+    
+    // hazard ratios (exp(coefs))
+    real hr_sex ; 
+    //real hr_mas ;
+    real hr_hfl ;
+    real hr_col ;
+    
+    // total treatment effects (also hazard ratios)
+    real hr_ret_total ;
+    real hr_pil_total ;
+    
+    hr_sex = exp(b_sex_mean) ;
+    //hr_mas = exp(b_mas_mean) ;
+    hr_hfl = exp(b_hfl_mean) ;
+    hr_col = exp(b_col) ;
+      
+    hr_ret_total = exp(b_ret_mean + b_trt_ret_mean) ;
+    hr_pil_total = exp(b_pil_mean + b_trt_pil_mean) ;
+    
   }
   
