@@ -18,14 +18,13 @@ library(survival)        # survsplit function
 library(mefa4)           # %notin%
 
 #_______________________________________________________________________________________________
-# 2. Read in data ----
+# 2. Read in fates data ----
 #_______________________________________________________________________________________________
 
 fates <- read.csv("Raw data/fates_final.csv")
-covs <- read.csv("Raw data/covariates_final.csv")
 
 #_______________________________________________________________________________________________
-# 3. Keep relevant columns ----
+# 3. Keep relevant columns (fates) ----
 #_______________________________________________________________________________________________
 
 # fates
@@ -47,30 +46,6 @@ fates.1 <- fates %>%
                 General.cause, 
                 Specific.cause,
                 Transmitter.lifetime)
-
-# covariates
-covs.1 <- covs %>%
-  
-  # keep relevant columns
-  dplyr::select(Site,
-                AnimalID,
-                Date,
-                ET1,
-                MRID,
-                Collar.type,
-                Sex,
-                Total.mass..kg.,
-                Bag.mass,
-                Hind.foot.length..cm.,
-                Weighed.w..collar.) %>%
-  
-  # rename columns
-  rename(Mass = Total.mass..kg.,
-         HFL = Hind.foot.length..cm.,
-         WWC = Weighed.w..collar.) %>%
-  
-  # coerce date
-  mutate(Date = as.Date(mdy(Date), tz = "America/Los_Angeles"))
 
 #_______________________________________________________________________________________________
 # 4. Format dates correctly ----
@@ -144,9 +119,8 @@ write.csv(day.lookup, "Cleaned data/day_lookup.csv")
 #_______________________________________________________________________________________________
 # 5c. Create numeric status variables indicating end points ----
 
-# the first of these indicates confirmed mortalities
+# this includes confirmed mortalities and informative censoring events
 
-# second indicates informative censoring events that we want to model as potential mortalities
 # we need to include dead transmitter events so we can include a collar dead vs. hare dead submodel
 
 # this does not count:
@@ -160,35 +134,12 @@ write.csv(day.lookup, "Cleaned data/day_lookup.csv")
 
 fates.1 <- fates.1 %>% 
   
-  mutate(
-    
-    # confirmed mortalities
-    # give informative censor events an NA, i.e., we'll model them
-    mort.event = case_when(Event.type == "Mortality" ~ 1,
-                           Event.type == "Censor" & 
-                           General.cause %in% c("Unknown",
-                                                "Dead transmitter") ~ NA,
-                           Event.type == "Censor" &
-                           General.cause %notin% c("Unknown",
-                                                "Dead transmitter") ~ 0),
-    
-    # potentially informative censoring events
-    # (11-05-2025 Is this even necessary, since all of these have NAs in the mortality column?)
-    cens.event = ifelse(Event.type == "Censor" & 
-                        General.cause %in% c("Unknown",
-                                             "Dead transmitter"),
+  mutate(status.num = ifelse(Event.type == "Mortality" |
+                             (Event.type == "Censor" & 
+                              General.cause %in% c("Unknown",
+                                                   "Dead transmitter")),
                              1,
-                             0)
-    
-    ) %>%
-    
-    # add status column for splitting (confirmed and possible events)
-    mutate(status.num = ifelse(mort.event == 1 |
-                               cens.event == 1,
-                               1,
-                               0)
-    
-    )
+                             0))
 
 #_______________________________________________________________________________________________
 # 5d. Split dataset by cutoffs ----
@@ -202,27 +153,23 @@ fates.2 <- survSplit(Surv(start,
                      start = "start",
                      end = "end")
 
-# change NAs in "start" to the stop time and create numeric indicator variables
+# create numeric mort indicator variable
 fates.2 <- fates.2 %>%
   
-  mutate(start = ifelse(is.na(start) == TRUE,
-                        end,
-                        start)) %>%
-  
-  mutate(mort.pred = ifelse(Event.type == "Mortality" &
-                            General.cause == "Predation" &
-                            status.num == 1,
-                            1,
-                            0),
-         mort.oth = ifelse(Event.type == "Mortality" &
-                           General.cause != "Predation" &
-                           status.num == 1,
-                           1,
-                           0),
-         cens = ifelse(Event.type == "Censor" &
-                       status.num == 1,
-                       1,
-                       0))
+  mutate(mort = case_when(
+    
+    # weeks without an event get a zero
+    Event.type == "Mortality" & status.num == 0 ~ 0,
+    Event.type == "Censor" & status.num == 0 ~ 0,
+    
+    # weeks with a mortality get a 1
+    Event.type == "Mortality" & status.num == 1 ~ 1,
+    
+    # weeks with an informative censoring event get an NA for imputation later
+    Event.type == "Censor" & status.num == 1 ~ NA
+    
+  )
+)
 
 #_______________________________________________________________________________________________
 # 5e. Keep relevant variables and create week variables ----
@@ -243,7 +190,7 @@ fates.3 <- fates.2 %>%
   # select columns we want
   dplyr::select(Site,
                 Animal.ID,
-                Ear.tag,
+                MRID,
                 Collar.type,
                 Sex,
                 Event.type,
@@ -251,9 +198,7 @@ fates.3 <- fates.2 %>%
                 Specific.cause,
                 start,
                 end,
-                mort.pred,
-                mort.oth,
-                cens,
+                mort,
                 week) %>%
   
   # add year variable (from day.lookup)
@@ -265,18 +210,88 @@ fates.3 <- fates.2 %>%
 #_______________________________________________________________________________________________
 # 6. Attribute covariate values to each individual/week observation ----
 #_______________________________________________________________________________________________
-# 6a. Calculate final mass ----
+# 6a. Read in covariate data and keep relevant columns ----
+#_______________________________________________________________________________________________
+
+covs <- read.csv("Raw data/covariates_final.csv")
+
+covs.1 <- covs %>%
+  
+  # keep relevant columns
+  dplyr::select(Site,
+                AnimalID,
+                Date,
+                ET1,
+                MRID,
+                Collar.type,
+                Sex,
+                Total.mass..kg.,
+                Bag.mass,
+                Hind.foot.length..cm.,
+                Weighed.w..collar.) %>%
+  
+  # rename columns
+  rename(Mass = Total.mass..kg.,
+         HFL = Hind.foot.length..cm.,
+         WWC = Weighed.w..collar.) %>%
+  
+  # coerce date
+  mutate(Date = as.Date(mdy(Date), tz = "America/Los_Angeles"))
+
+#_______________________________________________________________________________________________
+# 6b. Calculate final mass ----
 #_______________________________________________________________________________________________
 
 covs.2 <- covs.1 %>%
   
-  mutate(Final.mass = ifelse(is.na(Bag.mass),
-                             Mass - 0.1,
-                             Mass - Bag.mass)) %>%
+  mutate(Final.mass = case_when(
+    
+    # if bag mass is recorded, subtract it from measured mass
+    is.na(Bag.mass) == F ~ Mass - Bag.mass,
+    
+    # if bag mass is not recorded, subtract the mean measured bag mass
+    is.na(Bag.mass) == T ~ Mass - mean(Bag.mass, na.rm = T)
+    
+    )
+    
+    ) %>%
   
-  # remove Mass and Bag.mass
+  # subtract the collar mass if the animal was weighed with a collar on
+  # assume 40 g for all collars
+  mutate(Final.mass = ifelse(
+    
+    WWC == "Y",
+    Final.mass - 0.04,
+    Final.mass
+    
+  )
+  
+  ) %>%
+      
+  # remove variables
   dplyr::select(-c(Mass, 
-                   Bag.mass))
+                   Bag.mass,
+                   WWC))
+
+# 11-05-2025
+# I need to figure out the best way to attribute measured values to hare-week observations
+# Likely I will split the fates df by deployment,
+# search the covariates df for relevant information, 
+# and assign to entire deployment if that makes sense. 
+# I will leave NAs if we don't have any data
+
+# the caveat here will be mass and HFL will be AT CAPTURE measures 
+# because measurements are pretty sparse and inconsistent
+
+
+
+
+
+
+
+
+
+
 
 #_______________________________________________________________________________________________
 # 6b. Sex-stratified population means ----
