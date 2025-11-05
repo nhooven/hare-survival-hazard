@@ -191,6 +191,7 @@ fates.3 <- fates.2 %>%
   dplyr::select(Site,
                 Animal.ID,
                 MRID,
+                Capture.date,     # needed for splitting by deployment
                 Collar.type,
                 Sex,
                 Event.type,
@@ -273,42 +274,86 @@ covs.2 <- covs.1 %>%
                    Bag.mass,
                    WWC))
 
-# 11-05-2025
-# I need to figure out the best way to attribute measured values to hare-week observations
-# Likely I will split the fates df by deployment,
-# search the covariates df for relevant information, 
-# and assign to entire deployment if that makes sense. 
-# I will leave NAs if we don't have any data
-
-# the caveat here will be mass and HFL will be AT CAPTURE measures 
-# because measurements are pretty sparse and inconsistent
-
-
-
-
-
-
-
-
-
-
-
 #_______________________________________________________________________________________________
-# 6b. Sex-stratified population means ----
+# 6c. Fill in with matched measured values ----
 #_______________________________________________________________________________________________
 
-# determine mean mass and HFL
-means <- covs.2 %>%
+# split fates data by deployment
+# new deployment column
+fates.3$deployment = paste0(fates.3$MRID, "_", fates.3$Capture.date)
+
+fates.3.split <- split(fates.3, f = fates.3$deployment)
+
+# function to take each deployment, find any corresponding capture entries,
+# and attribute relevant mass + HFL observations
+attribute_covs <- function (x) {
   
-  # remove all individuals <= collaring mass
-  filter(Final.mass >= 0.8) %>%
+  # subset covs df
+  indiv.covs <- covs.2 %>% filter(MRID == x$MRID[1])
   
-  # group by sex
-  group_by(Sex) %>%
+  # subset all capture entries within 7 days (+/-) of the collaring event
+  indiv.covs.cap.window <- indiv.covs %>% 
+    
+    filter(Date >= x$Capture.date[1] - 7 &
+           Date <= x$Capture.date[1] + 7)
   
-  # summarize
-  summarize(mean.mass = round(mean(Final.mass), digits = 2),
-            mean.hfl = round(mean(HFL, na.rm = TRUE), digits = 1))
+  # if such entries exist, use the measurements closest to the collaring event
+  if (nrow(indiv.covs.cap.window) > 0) {
+    
+    # calculate days from collaring event
+    indiv.covs.cap.window <- indiv.covs.cap.window %>%
+      
+      mutate(days.from.collaring = abs(x$Capture.date[1] - Date)) %>%
+      
+      # arrange by days from collaring
+      arrange(days.from.collaring)
+    
+    # rank each set of measurements based upon days from collaring event, and
+    # choose the first one that isn't NA (assuming that at least one isn't)
+    # HFL
+    if (sum(is.na(indiv.covs.cap.window$HFL)) < nrow(indiv.covs.cap.window)) {
+      
+      x$HFL = indiv.covs.cap.window$HFL[which.min(is.na(indiv.covs.cap.window$HFL))]
+      
+    } else {
+      
+      x$HFL = NA
+      
+    }
+    
+    # Final.mass
+    if (sum(is.na(indiv.covs.cap.window$Final.mass)) < nrow(indiv.covs.cap.window)) {
+      
+      x$Final.mass = indiv.covs.cap.window$Final.mass[which.min(is.na(indiv.covs.cap.window$Final.mass))]
+      
+    } else {
+      
+      x$Final.mass = NA
+      
+    }
+    
+
+    # if such entries do not exist, assign NAs
+  } else {
+    
+    x$HFL = NA
+    x$Final.mass = NA
+    
+  }
+  
+  return(x)
+  
+}
+
+# apply function
+fates.4 <- do.call(rbind, lapply(X = fates.3.split, FUN = attribute_covs))
+
+
+# 11-05-2025 
+# Check how many missing observations we have
+
+
+
 
 #_______________________________________________________________________________________________
 # 6c. Fill in missing values with "best-guess" values ----
