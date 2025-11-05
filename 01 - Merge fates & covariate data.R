@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 02 Jan 2025 
+# Date last modified: 05 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -15,16 +15,14 @@
 library(tidyverse)       # manipulate and clean data
 library(lubridate)       # work with dates
 library(survival)        # survsplit function
+library(mefa4)           # %notin%
 
 #_______________________________________________________________________________________________
 # 2. Read in data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Raw data/fates_01_02_2025.csv")
-covs <- read.csv("Raw data/covariates_01_02_2025.csv")
-
-# define cutoff date
-cutoff <- as.Date("2024-12-31", tz = "America/Los_Angeles")
+fates <- read.csv("Raw data/fates_final.csv")
+covs <- read.csv("Raw data/covariates_final.csv")
 
 #_______________________________________________________________________________________________
 # 3. Keep relevant columns ----
@@ -39,38 +37,37 @@ fates.1 <- fates %>%
   # keep relevant columns
   dplyr::select(Site,
                 Animal.ID,
-                Ear.tag,
+                ET1,
+                MRID,
                 Collar.type,
                 Sex,
                 Capture.date,
                 Estimated.event.date,
                 Event.type,
                 General.cause, 
-                Specific.cause)
+                Specific.cause,
+                Transmitter.lifetime)
 
 # covariates
 covs.1 <- covs %>%
   
-  # keep only observations that exist
-  filter(Site.ID %in% c("1A", "1B", "1C", 
-                        "2A", "2B", "2C", 
-                        "3A", "3B", "3C", 
-                        "4A", "4B", "4C")) %>%
-  
   # keep relevant columns
-  dplyr::select(Site.ID,
-                Animal.ID,
+  dplyr::select(Site,
+                AnimalID,
                 Date,
-                Ear.tag..,
+                ET1,
+                MRID,
                 Collar.type,
                 Sex,
-                Mass,
+                Total.mass..kg.,
                 Bag.mass,
-                HFL) %>%
+                Hind.foot.length..cm.,
+                Weighed.w..collar.) %>%
   
   # rename columns
-  rename(Site = Site.ID,
-         Ear.tag = Ear.tag..) %>%
+  rename(Mass = Total.mass..kg.,
+         HFL = Hind.foot.length..cm.,
+         WWC = Weighed.w..collar.) %>%
   
   # coerce date
   mutate(Date = as.Date(mdy(Date), tz = "America/Los_Angeles"))
@@ -84,19 +81,7 @@ fates.1 <- fates.1 %>%
   
   # format dates correctly
   mutate(Capture.date = as.Date(mdy(Capture.date)),
-         Estimated.event.date = as.Date(mdy(Estimated.event.date))) %>%
-  
-  # change NAs in event date to cutoff
-  replace_na(list(Estimated.event.date = cutoff)) %>%
-  
-  # keep records with Capture.date < cutoff date
-  filter(Capture.date < cutoff)
-
-# covariates
-covs.1 <- covs.1 %>% 
-  
-  # format dates correctly
-  mutate(Date = as.Date(mdy(Date)))
+         Estimated.event.date = as.Date(mdy(Estimated.event.date)))
 
 #_______________________________________________________________________________________________
 # 5. Split by week and use correct identifiers for modeling ----
@@ -106,28 +91,38 @@ covs.1 <- covs.1 %>%
 
 # here, we will use the survSplit function in the "survival" package to split the dataset by week
 
-# create numeric start and end variables
 # define origin for our analysis (2022-10-01)
 date.origin <- as.numeric(as.Date("2022-10-01"))
 
-fates.1$start <- as.numeric(fates.1$Capture.date) - date.origin
-fates.1$end <- as.numeric(fates.1$Estimated.event.date) - date.origin
+# create numeric start and end variables
+fates.1 <- fates.1 %>%
+  
+  mutate(start = as.numeric(Capture.date) - date.origin,
+         end = as.numeric(Estimated.event.date) - date.origin)
 
-# create vector of time points
+# create vector of weekly time points, from week 1 to the final week of the study
 cut.points <- seq(1,
-                  as.numeric(cutoff) - date.origin,
+                  max(fates.1$end),
                   7)
 
 #_______________________________________________________________________________________________
 # 5b. Create lookup table for dates and weeks ----
+
+# this table provides the date, numeric day, ordinal day of the year, integer month,
+# calendar year, and integer week within the calendar year
+
 #_______________________________________________________________________________________________
 
-day.lookup <- data.frame(study.date = seq(as.Date("2022-10-01"), cutoff, by = 1),
-                         study.day = 1:length(seq(as.Date("2022-10-01"), cutoff, by = 1)),
-                         year.day = yday(seq(as.Date("2022-10-01"), cutoff, by = 1)),
-                         month = month(seq(as.Date("2022-10-01"), cutoff, by = 1)),
-                         year = year(seq(as.Date("2022-10-01"), cutoff, by = 1)),
-                         year.week = week(seq(as.Date("2022-10-01"), cutoff, by = 1)))
+# final date of study
+max.date = max(fates.1$Estimated.event.date)
+
+# create lookup table
+day.lookup <- data.frame(study.date = seq(as.Date("2022-10-01"), max.date, by = 1),
+                         study.day = 1:length(seq(as.Date("2022-10-01"), max.date, by = 1)),
+                         year.day = yday(seq(as.Date("2022-10-01"), max.date, by = 1)),
+                         month = month(seq(as.Date("2022-10-01"), max.date, by = 1)),
+                         year = year(seq(as.Date("2022-10-01"), max.date, by = 1)),
+                         year.week = week(seq(as.Date("2022-10-01"), max.date, by = 1)))
 
 # add in study week identifier
 week.id <- rep(1:length(cut.points), each = 7)
@@ -136,6 +131,7 @@ day.lookup$study.week <- week.id[1:(length(week.id) -
                                    (length(week.id) - nrow(day.lookup)))]
 
 # add study-year-week (what we'll use for modeling)
+# this begins again at the start of Oct each year (i.e., the recurrent time origin/horizon)
 study.year.week.id <- c(rep(1:52, each = 7), rep(1:52, each = 7),
                         rep(1:52, each = 7), rep(1:52, each = 7))
 
@@ -146,9 +142,13 @@ day.lookup$study.year.week <- study.year.week.id[1:(length(study.year.week.id) -
 write.csv(day.lookup, "Cleaned data/day_lookup.csv")
 
 #_______________________________________________________________________________________________
-# 5c. Create numeric status variable indicating end points ----
+# 5c. Create numeric status variables indicating end points ----
 
-# here we only indicate censoring EVENTS that we would like to model.
+# the first of these indicates confirmed mortalities
+
+# second indicates informative censoring events that we want to model as potential mortalities
+# we need to include dead transmitter events so we can include a collar dead vs. hare dead submodel
+
 # this does not count:
 # - collar removals
 # - collar related morts after one week
@@ -160,12 +160,35 @@ write.csv(day.lookup, "Cleaned data/day_lookup.csv")
 
 fates.1 <- fates.1 %>% 
   
-  mutate(status.num = ifelse(Event.type == "Mortality" |
-                            (Event.type == "Censor" & 
-                             General.cause %in% c("Unknown",
-                                                  "Dead transmitter")),
+  mutate(
+    
+    # confirmed mortalities
+    # give informative censor events an NA, i.e., we'll model them
+    mort.event = case_when(Event.type == "Mortality" ~ 1,
+                           Event.type == "Censor" & 
+                           General.cause %in% c("Unknown",
+                                                "Dead transmitter") ~ NA,
+                           Event.type == "Censor" &
+                           General.cause %notin% c("Unknown",
+                                                "Dead transmitter") ~ 0),
+    
+    # potentially informative censoring events
+    # (11-05-2025 Is this even necessary, since all of these have NAs in the mortality column?)
+    cens.event = ifelse(Event.type == "Censor" & 
+                        General.cause %in% c("Unknown",
+                                             "Dead transmitter"),
                              1,
-                             0))
+                             0)
+    
+    ) %>%
+    
+    # add status column for splitting (confirmed and possible events)
+    mutate(status.num = ifelse(mort.event == 1 |
+                               cens.event == 1,
+                               1,
+                               0)
+    
+    )
 
 #_______________________________________________________________________________________________
 # 5d. Split dataset by cutoffs ----
