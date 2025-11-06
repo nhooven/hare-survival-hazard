@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 05 Nov 2025 
+# Date last modified: 06 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -15,7 +15,6 @@
 library(tidyverse)       # manipulate and clean data
 library(lubridate)       # work with dates
 library(survival)        # survsplit function
-library(mefa4)           # %notin%
 
 #_______________________________________________________________________________________________
 # 2. Read in fates data ----
@@ -348,197 +347,21 @@ attribute_covs <- function (x) {
 # apply function
 fates.4 <- do.call(rbind, lapply(X = fates.3.split, FUN = attribute_covs))
 
-
-# 11-05-2025 
-# Check how many missing observations we have
-
-
-
-
-#_______________________________________________________________________________________________
-# 6c. Fill in missing values with "best-guess" values ----
-#_______________________________________________________________________________________________
-
-# NOTE: All observations MUST have an associated sex value
-
-covs.3 <- data.frame()
-
-for (i in unique(covs.2$Animal.ID)) {
+# check how many missing observations we have - by deployment
+fates.4.summary <- fates.4 %>%
   
-  # subset covariate data
-  focal.covs <- covs.2 %>% filter(Animal.ID == i) %>%
-    
-    # ensure that this is arranged by date
-    arrange(Date) %>%
-    
-    # calculate a days column
-    mutate(days = as.numeric(Date))
+  group_by(deployment) %>%
   
-  # replace NAs
-  # loop through all rows
-  for (j in 1:nrow(focal.covs)) {
-    
-    # subset focal row
-    focal.row <- focal.covs[j, ]
-    
-    # MASS
-    # does the focal row have an NA for mass?
-    if (is.na(focal.row$Final.mass)) {
-      
-      # are there any valid other values to use?
-      # calculate day differences - temporary column that will be overwritten in each j
-      focal.covs$days.diff <- abs(focal.row$days - focal.covs$days)
-      
-      if (any(!is.na(focal.covs$Final.mass) &   # must not be NA
-              focal.covs$Final.mass >= 0.8 &    # mass must be above the cutoff
-              focal.covs$days.diff > 0 &        # cannot be the focal row
-              focal.covs$days.diff < 30)        # should be within 30 days
-          ) {
-        
-        # use the value for the entry that minimizes the time difference
-        focal.covs.temp <- focal.covs %>% filter(days.diff != 0 & is.na(Final.mass) == FALSE) 
-        
-        focal.row$Final.mass <- focal.covs.temp$Final.mass[focal.covs.temp$days.diff == min(focal.covs.temp$days.diff)]
-      
-        # if else, use the mean value by sex  
-      } else {
-        
-        focal.row$Final.mass <- means$mean.mass[means$Sex == focal.row$Sex]
-        
-      }
-      
-      focal.row.1 <- focal.row %>% dplyr::select(Site,
-                                                 Animal.ID,
-                                                 Date,
-                                                 Ear.tag,
-                                                 Collar.type,
-                                                 Sex,
-                                                 HFL,
-                                                 Final.mass,
-                                                 days)
-      
-    } else {
-      
-      focal.row.1 <- focal.row %>% dplyr::select(Site,
-                                                 Animal.ID,
-                                                 Date,
-                                                 Ear.tag,
-                                                 Collar.type,
-                                                 Sex,
-                                                 HFL,
-                                                 Final.mass,
-                                                 days)
-      
-    }
-    
-    # HFL
-    # does the focal row have an NA for HFL?
-    if (is.na(focal.row$HFL)) {
-      
-      # are there any valid other values to use?
-      # calculate day differences - temporary column that will be overwritten in each j
-      focal.covs$days.diff <- abs(focal.row$days - focal.covs$days)
-      
-      if (any(!is.na(focal.covs$HFL) &          # must not be NA
-              focal.covs$HFL >= 11.0 &          # HFL must be above the cutoff
-              focal.covs$days.diff > 0 &        # cannot be the focal row
-              focal.covs$days.diff < 30)        # should be within 30 days
-      ) {
-        
-        # use the value for the entry that minimizes the time difference
-        focal.covs.temp <- focal.covs %>% filter(days.diff != 0 & is.na(HFL) == FALSE)  
-        
-        focal.row$HFL <- focal.covs.temp$HFL[focal.covs.temp$days.diff == min(focal.covs.temp$days.diff)]
-        
-        # if else, use the mean value by sex  
-      } else {
-        
-        focal.row$HFL <- means$mean.hfl[means$Sex == focal.row$Sex]
-        
-      }
-      
-      focal.row.1 <- focal.row %>% dplyr::select(Site,
-                                                 Animal.ID,
-                                                 Date,
-                                                 Ear.tag,
-                                                 Collar.type,
-                                                 Sex,
-                                                 HFL,
-                                                 Final.mass,
-                                                 days)
-      
-    } else {
-      
-      focal.row.1 <- focal.row %>% dplyr::select(Site,
-                                                 Animal.ID,
-                                                 Date,
-                                                 Ear.tag,
-                                                 Collar.type,
-                                                 Sex,
-                                                 HFL,
-                                                 Final.mass,
-                                                 days)
-      
-    }
-    
-    # bind into master df
-    covs.3 <- rbind(covs.3, focal.row.1)
-    
-  }
-  
-}
+  slice(1)
 
-# drop "days" column
-covs.3 <- covs.3 %>% dplyr::select(-days)
-
-# add numeric measurement day
-covs.4 <- covs.3 %>% mutate(measure.date = as.numeric(Date) - date.origin)
-
-#_______________________________________________________________________________________________
-# 6d. Attribute covariates to all observations ----
-#_______________________________________________________________________________________________
-
-# remove any observations without Animal.IDs
-fates.3 <- fates.3 %>% filter(Animal.ID != "")
-
-# loop through all observations and attribute values from covs.3
-fates.4 <- data.frame()
-
-for (i in unique(fates.3$Animal.ID)) {
-  
-  # subset monitoring data
-  focal.id <- fates.3 %>% filter(Animal.ID == i)
-  
-  # subset covariate data
-  focal.covs <- covs.4 %>% filter(Animal.ID == i) %>%
-    
-    # ensure that this is arranged by date
-    arrange(Date)
-  
-  # FOR NOW - assume the sex recorded in "fates" matches those in "covs"
-  
-  # attribute closest mass and HFL records to focal.id
-  for (j in 1:nrow(focal.id)) {
-    
-    focal.id$Mass[j] <- focal.covs$Final.mass[which.min(abs(focal.id$start[j] - focal.covs$measure.date))] 
-    
-    focal.id$HFL[j] <- focal.covs$HFL[which.min(abs(focal.id$start[j] - focal.covs$measure.date))] 
-    
-  }
-  
-  # bind to master df
-  fates.4 <- rbind(focal.id, fates.4)
-  
-}
-
-# remove "start" and "end"
-fates.5 <- fates.4 %>% dplyr::select(-c(start, end))
+sum(is.na(fates.4.summary$HFL))
+sum(is.na(fates.4.summary$Final.mass))
 
 #_______________________________________________________________________________________________
 # 7. Standardize and format covariates ----
 #_______________________________________________________________________________________________
 
-fates.5 <- fates.5 %>%
+fates.5 <- fates.4 %>%
   
   mutate(
          # use an indicator variable for sex (0 = F [intercept])
@@ -552,8 +375,11 @@ fates.5 <- fates.5 %>%
                                 1),
          
          # center and scale continuous covariates
-         Mass.1 = as.numeric(scale(Mass)),
-         HFL.1 = as.numeric(scale(HFL))
+         Mass.1 = as.numeric(scale(Final.mass)),
+         HFL.1 = as.numeric(scale(HFL)),
+         
+         # integer deployment
+         deployment.1 = as.integer(as.factor(deployment))
          )
 
 #_______________________________________________________________________________________________
@@ -619,18 +445,7 @@ fates.6$trt.pil[fates.6$Site %in% c("1B", "2A", "3A", "4B")] <- 1
 fates.6$cluster <- as.numeric(substr(fates.6$Site, 1, 1))
 
 #_______________________________________________________________________________________________
-# 10. Add principal component "body size" and body condition index ----
+# 10. Write to csv ----
 #_______________________________________________________________________________________________
 
-# calculate first principal component axis
-fates.6$PC1 <- (fates.6$Mass.1 + fates.6$HFL.1) / 2
-
-# divide mass by HFL to create a body condition index uncorrelated with either variable
-fates.6$BCI <- fates.6$Mass.1 / fates.6$HFL.1
-fates.6$BCI.1 <- as.numeric(scale(fates.6$BCI))
-
-#_______________________________________________________________________________________________
-# 11. Write to csv ----
-#_______________________________________________________________________________________________
-
-write.csv(fates.6, "Cleaned data/fates_cleaned_01_02_2025.csv")
+write.csv(fates.6, "Cleaned data/fates_final_cleaned.csv")
