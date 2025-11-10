@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 06 Nov 2025 
+# Date last modified: 10 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -56,6 +56,204 @@ fates.1 <- fates.1 %>%
   # format dates correctly
   mutate(Capture.date = as.Date(mdy(Capture.date)),
          Estimated.event.date = as.Date(mdy(Estimated.event.date)))
+
+#_______________________________________________________________________________________________
+# 5. Dataset for fate classification submodel ----
+#_______________________________________________________________________________________________
+
+fate.class <- fates.1 %>%
+  
+  filter(is.na(Transmitter.lifetime) == FALSE)
+
+# write to file
+write.csv(fate.class, "Cleaned data/fate_class_cleaned.csv")
+
+#_______________________________________________________________________________________________
+# 6. Attribute covariate values to each individual/week observation ----
+#_______________________________________________________________________________________________
+# 6a. Read in covariate data and keep relevant columns ----
+#_______________________________________________________________________________________________
+
+covs <- read.csv("Raw data/covariates_final.csv")
+
+covs.1 <- covs %>%
+  
+  # keep relevant columns
+  dplyr::select(Site,
+                AnimalID,
+                Date,
+                ET1,
+                MRID,
+                Collar.type,
+                Sex,
+                Total.mass..kg.,
+                Bag.mass,
+                Hind.foot.length..cm.,
+                Weighed.w..collar.) %>%
+  
+  # rename columns
+  rename(Mass = Total.mass..kg.,
+         HFL = Hind.foot.length..cm.,
+         WWC = Weighed.w..collar.) %>%
+  
+  # coerce date
+  mutate(Date = as.Date(mdy(Date), tz = "America/Los_Angeles"))
+
+#_______________________________________________________________________________________________
+# 6b. Calculate final mass ----
+#_______________________________________________________________________________________________
+
+covs.2 <- covs.1 %>%
+  
+  mutate(Final.mass = case_when(
+    
+    # if bag mass is recorded, subtract it from measured mass
+    is.na(Bag.mass) == F ~ Mass - Bag.mass,
+    
+    # if bag mass is not recorded, subtract the mean measured bag mass
+    is.na(Bag.mass) == T ~ Mass - mean(Bag.mass, na.rm = T)
+    
+  )
+  
+  ) %>%
+  
+  # subtract the collar mass if the animal was weighed with a collar on
+  # assume 40 g for all collars
+  mutate(Final.mass = ifelse(
+    
+    WWC == "Y",
+    Final.mass - 0.04,
+    Final.mass
+    
+  )
+  
+  ) %>%
+  
+  # remove variables
+  dplyr::select(-c(Mass, 
+                   Bag.mass,
+                   WWC))
+
+#_______________________________________________________________________________________________
+# 6c. Fill in with matched measured values ----
+#_______________________________________________________________________________________________
+
+# split fates data by deployment
+# new deployment column
+fates.1$deployment = paste0(fates.1$MRID, "_", fates.1$Capture.date)
+
+fates.1.split <- split(fates.1, f = fates.1$deployment)
+
+# function to take each deployment, find any corresponding capture entries,
+# and attribute relevant mass + HFL observations
+attribute_covs <- function (x) {
+  
+  # subset covs df
+  indiv.covs <- covs.2 %>% filter(MRID == x$MRID[1])
+  
+  # subset all capture entries within 7 days (+/-) of the collaring event
+  indiv.covs.cap.window <- indiv.covs %>% 
+    
+    filter(Date >= x$Capture.date[1] - 7 &
+           Date <= x$Capture.date[1] + 7)
+  
+  # if such entries exist, use the measurements closest to the collaring event
+  if (nrow(indiv.covs.cap.window) > 0) {
+    
+    # calculate days from collaring event
+    indiv.covs.cap.window <- indiv.covs.cap.window %>%
+      
+      mutate(days.from.collaring = abs(x$Capture.date[1] - Date)) %>%
+      
+      # arrange by days from collaring
+      arrange(days.from.collaring)
+    
+    # rank each set of measurements based upon days from collaring event, and
+    # choose the first one that isn't NA (assuming that at least one isn't)
+    # HFL
+    if (sum(is.na(indiv.covs.cap.window$HFL)) < nrow(indiv.covs.cap.window)) {
+      
+      x$HFL = indiv.covs.cap.window$HFL[which.min(is.na(indiv.covs.cap.window$HFL))]
+      
+    } else {
+      
+      x$HFL = NA
+      
+    }
+    
+    # Final.mass
+    if (sum(is.na(indiv.covs.cap.window$Final.mass)) < nrow(indiv.covs.cap.window)) {
+      
+      x$Final.mass = indiv.covs.cap.window$Final.mass[which.min(is.na(indiv.covs.cap.window$Final.mass))]
+      
+    } else {
+      
+      x$Final.mass = NA
+      
+    }
+    
+    
+    # if such entries do not exist, assign NAs
+  } else {
+    
+    x$HFL = NA
+    x$Final.mass = NA
+    
+  }
+  
+  return(x)
+  
+}
+
+# apply function
+fates.2 <- do.call(rbind, lapply(X = fates.1.split, FUN = attribute_covs))
+
+# check how many missing observations we have - by deployment
+fates.2.summary <- fates.2 %>%
+  
+  group_by(deployment)
+
+sum(is.na(fates.2.summary$HFL))
+sum(is.na(fates.2.summary$Final.mass))
+
+
+
+# 11-10-2025
+# Was going to impute covariates but ya know what, how about we still do this in the model?
+
+
+
+#_______________________________________________________________________________________________
+# 7. Standardize and format covariates ----
+#_______________________________________________________________________________________________
+
+fates.5 <- fates.4 %>%
+  
+  mutate(
+    # use an indicator variable for sex (0 = F [intercept])
+    Sex.1 = ifelse(Sex == "F",
+                   0,
+                   1),
+    
+    # use an indicator variable for Collar.type (0 = VHF-only)
+    Collar.type.1 = ifelse(Collar.type == "VHF-ONLY",
+                           0,
+                           1),
+    
+    # center and scale continuous covariates
+    Mass.1 = as.numeric(scale(Final.mass)),
+    HFL.1 = as.numeric(scale(HFL)),
+    
+    # integer deployment
+    deployment.1 = as.integer(as.factor(deployment))
+  )
+
+
+
+
+
+
+
 
 #_______________________________________________________________________________________________
 # 5. Split by week and use correct identifiers for modeling ----
