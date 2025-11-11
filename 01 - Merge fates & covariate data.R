@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 10 Nov 2025 
+# Date last modified: 11 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -209,25 +209,11 @@ attribute_covs <- function (x) {
 fates.2 <- do.call(rbind, lapply(X = fates.1.split, FUN = attribute_covs))
 
 # check how many missing observations we have - by deployment
-fates.2.summary <- fates.2 %>%
-  
-  group_by(deployment)
+sum(is.na(fates.2$HFL))
+sum(is.na(fates.2$Final.mass))
 
-sum(is.na(fates.2.summary$HFL))
-sum(is.na(fates.2.summary$Final.mass))
-
-
-
-# 11-10-2025
-# Was going to impute covariates but ya know what, how about we still do this in the model?
-
-
-
-#_______________________________________________________________________________________________
-# 7. Standardize and format covariates ----
-#_______________________________________________________________________________________________
-
-fates.5 <- fates.4 %>%
+# format covariates
+fates.3 <- fates.2 %>%
   
   mutate(
     # use an indicator variable for sex (0 = F [intercept])
@@ -240,25 +226,21 @@ fates.5 <- fates.4 %>%
                            0,
                            1),
     
-    # center and scale continuous covariates
-    Mass.1 = as.numeric(scale(Final.mass)),
-    HFL.1 = as.numeric(scale(HFL)),
-    
     # integer deployment
     deployment.1 = as.integer(as.factor(deployment))
   )
 
+# keep complete observations and write to csv
+fates.3.complete <- fates.3 %>%
+  
+  drop_na(HFL, Final.mass)
 
-
-
-
-
-
+write.csv(fates.3.complete, "Cleaned data/fates_complete_cleaned.csv")
 
 #_______________________________________________________________________________________________
-# 5. Split by week and use correct identifiers for modeling ----
+# 7. Split by week and use correct identifiers for modeling ----
 #_______________________________________________________________________________________________
-# 5a. Define week cutoffs ----
+# 7a. Define week cutoffs ----
 #_______________________________________________________________________________________________
 
 # here, we will use the survSplit function in the "survival" package to split the dataset by week
@@ -267,18 +249,18 @@ fates.5 <- fates.4 %>%
 date.origin <- as.numeric(as.Date("2022-10-01"))
 
 # create numeric start and end variables
-fates.1 <- fates.1 %>%
+fates.3 <- fates.3 %>%
   
   mutate(start = as.numeric(Capture.date) - date.origin,
          end = as.numeric(Estimated.event.date) - date.origin)
 
 # create vector of weekly time points, from week 1 to the final week of the study
 cut.points <- seq(1,
-                  max(fates.1$end),
+                  max(fates.3$end),
                   7)
 
 #_______________________________________________________________________________________________
-# 5b. Create lookup table for dates and weeks ----
+# 7b. Create lookup table for dates and weeks ----
 
 # this table provides the date, numeric day, ordinal day of the year, integer month,
 # calendar year, and integer week within the calendar year
@@ -286,7 +268,7 @@ cut.points <- seq(1,
 #_______________________________________________________________________________________________
 
 # final date of study
-max.date = max(fates.1$Estimated.event.date)
+max.date = max(fates.3$Estimated.event.date)
 
 # create lookup table
 day.lookup <- data.frame(study.date = seq(as.Date("2022-10-01"), max.date, by = 1),
@@ -314,271 +296,122 @@ day.lookup$study.year.week <- study.year.week.id[1:(length(study.year.week.id) -
 write.csv(day.lookup, "Cleaned data/day_lookup.csv")
 
 #_______________________________________________________________________________________________
-# 5c. Create numeric status variables indicating end points ----
+# 7c. Create event variable ----
 
-# this includes confirmed mortalities and informative censoring events
+# Mortalities and unknown censor events get a 1
+# all other observations get a zero
 
-# we need to include dead transmitter events so we can include a collar dead vs. hare dead submodel
+# y.mort
+# ALL mortality events get a 1
+# unknown censors get an NA
+# all other observations get a zero
 
-# this does not count:
-# - collar removals
-# - collar related morts after one week
-# - slipped collars
-# - any animals still alive at the end of the monitoring period 
-# BUT we still want to include these observations
+# y.pred
+# confirmed predation and unknown mortalities get a 1
+# unknown censors get an NA
+# all other observations get a zero (including confirmed other mort types)
 
 #_______________________________________________________________________________________________
 
-fates.1 <- fates.1 %>% 
+fates.3 <- fates.3 %>% 
   
-  mutate(status.num = ifelse(Event.type == "Mortality" |
-                             (Event.type == "Censor" & 
-                              General.cause %in% c("Unknown",
-                                                   "Dead transmitter")),
-                             1,
-                             0))
-
+  mutate(
+    
+    event = ifelse(Event.type == "Mortality" |
+                   (Event.type == "Censor" & 
+                   General.cause == "Unknown"),
+                   1,
+                   0),
+    
+  )
+                    
 #_______________________________________________________________________________________________
-# 5d. Split dataset by cutoffs ----
+# 7d. Split dataset by events ----
 #_______________________________________________________________________________________________
 
-fates.2 <- survSplit(Surv(start,
+fates.4 <- survSplit(Surv(start,
                           end,
-                          status.num) ~ .,
-                     data = fates.1,
+                          event) ~ .,
+                     data = fates.3,
                      cut = cut.points,
                      start = "start",
                      end = "end")
 
-# create numeric mort indicator variable
-fates.2 <- fates.2 %>%
-  
-  mutate(mort = case_when(
-    
-    # weeks without an event get a zero
-    Event.type == "Mortality" & status.num == 0 ~ 0,
-    Event.type == "Censor" & status.num == 0 ~ 0,
-    
-    # weeks with a mortality get a 1
-    Event.type == "Mortality" & status.num == 1 ~ 1,
-    
-    # weeks with an informative censoring event get an NA for imputation later
-    Event.type == "Censor" & status.num == 1 ~ NA
-    
-  )
-)
+#_______________________________________________________________________________________________
+# 7e. Mortality indicators ----
+
+# y.mort
+# ALL mortality events get a 1
+# unknown censors get an NA
+# all other observations get a zero
+
+# y.pred
+# confirmed predation and unknown mortalities get a 1
+# unknown censors get an NA
+# all other observations get a zero (including confirmed other mort types)
 
 #_______________________________________________________________________________________________
-# 5e. Keep relevant variables and create week variables ----
+
+fates.4 <- fates.4 %>% 
+  
+  mutate(
+    
+    y.mort = ifelse(event == 1 & Event.type == "Mortality",
+                    1,
+                    ifelse(event == 1 & Event.type == "Censor" & General.cause == "Unknown",
+                           NA,
+                           0)),
+    
+    y.pred = ifelse(event == 1 & 
+                      Event.type == "Mortality" & 
+                      (General.cause == "Predation" | General.cause == "Unknown"),
+                    1,
+                    ifelse(event == 1 & Event.type == "Censor" & General.cause == "Unknown",
+                           NA,
+                           0))
+    
+  )
+
+#_______________________________________________________________________________________________
+# 7f. Create week variable and keep only columns we need ----
 #_______________________________________________________________________________________________
 
 # add correct "study.year.week" as a variable
-fates.2$week <- NA
+fates.4$week <- NA
 
-for (i in 1:length(fates.2$start)) {
+for (i in 1:length(fates.4$start)) {
   
-  fates.2$week[i] <- day.lookup$study.year.week[which(day.lookup$study.day == fates.2$start[i])]
+  fates.4$week[i] <- day.lookup$study.year.week[which(day.lookup$study.day == fates.4$start[i])]
   
 }
 
 # clean
-fates.3 <- fates.2 %>%
+fates.5 <- fates.4 %>%
   
   # select columns we want
   dplyr::select(Site,
                 Animal.ID,
                 MRID,
-                Capture.date,     # needed for splitting by deployment
-                Collar.type,
-                Sex,
+                deployment.1,
                 Event.type,
                 General.cause,
                 Specific.cause,
                 start,
                 end,
-                mort,
-                week) %>%
+                event,
+                y.mort,
+                y.pred,
+                week,
+                Sex.1,
+                Collar.type.1,
+                HFL,
+                Final.mass) %>%
   
   # add year variable (from day.lookup)
   mutate(year = case_when(end < 93 ~ 2022,
                           end > 92 & end < 458 ~ 2023,
                           end > 457 & end < 824 ~ 2024,
                           end > 823 ~ 2025))
-
-#_______________________________________________________________________________________________
-# 6. Attribute covariate values to each individual/week observation ----
-#_______________________________________________________________________________________________
-# 6a. Read in covariate data and keep relevant columns ----
-#_______________________________________________________________________________________________
-
-covs <- read.csv("Raw data/covariates_final.csv")
-
-covs.1 <- covs %>%
-  
-  # keep relevant columns
-  dplyr::select(Site,
-                AnimalID,
-                Date,
-                ET1,
-                MRID,
-                Collar.type,
-                Sex,
-                Total.mass..kg.,
-                Bag.mass,
-                Hind.foot.length..cm.,
-                Weighed.w..collar.) %>%
-  
-  # rename columns
-  rename(Mass = Total.mass..kg.,
-         HFL = Hind.foot.length..cm.,
-         WWC = Weighed.w..collar.) %>%
-  
-  # coerce date
-  mutate(Date = as.Date(mdy(Date), tz = "America/Los_Angeles"))
-
-#_______________________________________________________________________________________________
-# 6b. Calculate final mass ----
-#_______________________________________________________________________________________________
-
-covs.2 <- covs.1 %>%
-  
-  mutate(Final.mass = case_when(
-    
-    # if bag mass is recorded, subtract it from measured mass
-    is.na(Bag.mass) == F ~ Mass - Bag.mass,
-    
-    # if bag mass is not recorded, subtract the mean measured bag mass
-    is.na(Bag.mass) == T ~ Mass - mean(Bag.mass, na.rm = T)
-    
-    )
-    
-    ) %>%
-  
-  # subtract the collar mass if the animal was weighed with a collar on
-  # assume 40 g for all collars
-  mutate(Final.mass = ifelse(
-    
-    WWC == "Y",
-    Final.mass - 0.04,
-    Final.mass
-    
-  )
-  
-  ) %>%
-      
-  # remove variables
-  dplyr::select(-c(Mass, 
-                   Bag.mass,
-                   WWC))
-
-#_______________________________________________________________________________________________
-# 6c. Fill in with matched measured values ----
-#_______________________________________________________________________________________________
-
-# split fates data by deployment
-# new deployment column
-fates.3$deployment = paste0(fates.3$MRID, "_", fates.3$Capture.date)
-
-fates.3.split <- split(fates.3, f = fates.3$deployment)
-
-# function to take each deployment, find any corresponding capture entries,
-# and attribute relevant mass + HFL observations
-attribute_covs <- function (x) {
-  
-  # subset covs df
-  indiv.covs <- covs.2 %>% filter(MRID == x$MRID[1])
-  
-  # subset all capture entries within 7 days (+/-) of the collaring event
-  indiv.covs.cap.window <- indiv.covs %>% 
-    
-    filter(Date >= x$Capture.date[1] - 7 &
-           Date <= x$Capture.date[1] + 7)
-  
-  # if such entries exist, use the measurements closest to the collaring event
-  if (nrow(indiv.covs.cap.window) > 0) {
-    
-    # calculate days from collaring event
-    indiv.covs.cap.window <- indiv.covs.cap.window %>%
-      
-      mutate(days.from.collaring = abs(x$Capture.date[1] - Date)) %>%
-      
-      # arrange by days from collaring
-      arrange(days.from.collaring)
-    
-    # rank each set of measurements based upon days from collaring event, and
-    # choose the first one that isn't NA (assuming that at least one isn't)
-    # HFL
-    if (sum(is.na(indiv.covs.cap.window$HFL)) < nrow(indiv.covs.cap.window)) {
-      
-      x$HFL = indiv.covs.cap.window$HFL[which.min(is.na(indiv.covs.cap.window$HFL))]
-      
-    } else {
-      
-      x$HFL = NA
-      
-    }
-    
-    # Final.mass
-    if (sum(is.na(indiv.covs.cap.window$Final.mass)) < nrow(indiv.covs.cap.window)) {
-      
-      x$Final.mass = indiv.covs.cap.window$Final.mass[which.min(is.na(indiv.covs.cap.window$Final.mass))]
-      
-    } else {
-      
-      x$Final.mass = NA
-      
-    }
-    
-
-    # if such entries do not exist, assign NAs
-  } else {
-    
-    x$HFL = NA
-    x$Final.mass = NA
-    
-  }
-  
-  return(x)
-  
-}
-
-# apply function
-fates.4 <- do.call(rbind, lapply(X = fates.3.split, FUN = attribute_covs))
-
-# check how many missing observations we have - by deployment
-fates.4.summary <- fates.4 %>%
-  
-  group_by(deployment) %>%
-  
-  slice(1)
-
-sum(is.na(fates.4.summary$HFL))
-sum(is.na(fates.4.summary$Final.mass))
-
-#_______________________________________________________________________________________________
-# 7. Standardize and format covariates ----
-#_______________________________________________________________________________________________
-
-fates.5 <- fates.4 %>%
-  
-  mutate(
-         # use an indicator variable for sex (0 = F [intercept])
-         Sex.1 = ifelse(Sex == "F",
-                        0,
-                        1),
-         
-         # use an indicator variable for Collar.type (0 = VHF-only)
-         Collar.type.1 = ifelse(Collar.type == "VHF-ONLY",
-                                0,
-                                1),
-         
-         # center and scale continuous covariates
-         Mass.1 = as.numeric(scale(Final.mass)),
-         HFL.1 = as.numeric(scale(HFL)),
-         
-         # integer deployment
-         deployment.1 = as.integer(as.factor(deployment))
-         )
 
 #_______________________________________________________________________________________________
 # 8. Add treatment variable ----
