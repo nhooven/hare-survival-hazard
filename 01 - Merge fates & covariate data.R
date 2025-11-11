@@ -429,7 +429,8 @@ fates.5 <- fates.4 %>%
                 Sex.1,
                 Collar.type.1,
                 HFL,
-                Final.mass) %>%
+                Final.mass,
+                Transmitter.lifetime) %>%
   
   # add year variable (from day.lookup)
   mutate(year = case_when(end < 93 ~ 2022,
