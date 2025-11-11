@@ -63,8 +63,32 @@ fates.1 <- fates.1 %>%
 
 fate.class <- fates.1 %>%
   
-  filter(is.na(Transmitter.lifetime) == FALSE)
-
+  # only those with lifetimes
+  filter(is.na(Transmitter.lifetime) == FALSE) %>%
+  
+  # confirmed morts (1 in the submodel) and confirmed dead tags (0)
+  filter(Event.type == "Mortality" |
+           (Event.type == "Censor" & General.cause == "Dead transmitter")) %>%
+  
+  # transform variables
+  mutate(
+    
+    Collar.type.1 = ifelse(Collar.type == "VHF-ONLY",
+                           0,
+                           1),
+    
+    mort = ifelse(Event.type == "Mortality",
+                  1,
+                  0)
+    
+    ) %>%
+  
+  # keep only relevant columns
+  dplyr::select(MRID,
+                mort,
+                Transmitter.lifetime,
+                Collar.type.1)
+  
 # write to file
 write.csv(fate.class, "Cleaned data/fate_class_cleaned.csv")
 
