@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 11 Nov 2025 
+# Date last modified: 12 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -58,44 +58,9 @@ fates.1 <- fates.1 %>%
          Estimated.event.date = as.Date(mdy(Estimated.event.date)))
 
 #_______________________________________________________________________________________________
-# 5. Dataset for fate classification submodel ----
+# 5. Attribute covariate values to each individual/week observation ----
 #_______________________________________________________________________________________________
-
-fate.class <- fates.1 %>%
-  
-  # only those with lifetimes
-  filter(is.na(Transmitter.lifetime) == FALSE) %>%
-  
-  # confirmed morts (1 in the submodel) and confirmed dead tags (0)
-  filter(Event.type == "Mortality" |
-           (Event.type == "Censor" & General.cause == "Dead transmitter")) %>%
-  
-  # transform variables
-  mutate(
-    
-    Collar.type.1 = ifelse(Collar.type == "VHF-ONLY",
-                           0,
-                           1),
-    
-    mort = ifelse(Event.type == "Mortality",
-                  1,
-                  0)
-    
-    ) %>%
-  
-  # keep only relevant columns
-  dplyr::select(MRID,
-                mort,
-                Transmitter.lifetime,
-                Collar.type.1)
-  
-# write to file
-write.csv(fate.class, "Cleaned data/fate_class_cleaned.csv")
-
-#_______________________________________________________________________________________________
-# 6. Attribute covariate values to each individual/week observation ----
-#_______________________________________________________________________________________________
-# 6a. Read in covariate data and keep relevant columns ----
+# 5a. Read in covariate data and keep relevant columns ----
 #_______________________________________________________________________________________________
 
 covs <- read.csv("Raw data/covariates_final.csv")
@@ -124,7 +89,7 @@ covs.1 <- covs %>%
   mutate(Date = as.Date(mdy(Date), tz = "America/Los_Angeles"))
 
 #_______________________________________________________________________________________________
-# 6b. Calculate final mass ----
+# 5b. Calculate final mass ----
 #_______________________________________________________________________________________________
 
 covs.2 <- covs.1 %>%
@@ -159,7 +124,7 @@ covs.2 <- covs.1 %>%
                    WWC))
 
 #_______________________________________________________________________________________________
-# 6c. Fill in with matched measured values ----
+# 5c. Fill in with matched measured values ----
 #_______________________________________________________________________________________________
 
 # split fates data by deployment
@@ -254,17 +219,10 @@ fates.3 <- fates.2 %>%
     deployment.1 = as.integer(as.factor(deployment))
   )
 
-# keep complete observations and write to csv
-fates.3.complete <- fates.3 %>%
-  
-  drop_na(HFL, Final.mass)
-
-write.csv(fates.3.complete, "Cleaned data/fates_complete_cleaned.csv")
-
 #_______________________________________________________________________________________________
-# 7. Split by week and use correct identifiers for modeling ----
+# 6. Split by week and use correct identifiers for modeling ----
 #_______________________________________________________________________________________________
-# 7a. Define week cutoffs ----
+# 6a. Define week cutoffs ----
 #_______________________________________________________________________________________________
 
 # here, we will use the survSplit function in the "survival" package to split the dataset by week
@@ -284,7 +242,7 @@ cut.points <- seq(1,
                   7)
 
 #_______________________________________________________________________________________________
-# 7b. Create lookup table for dates and weeks ----
+# 6b. Create lookup table for dates and weeks ----
 
 # this table provides the date, numeric day, ordinal day of the year, integer month,
 # calendar year, and integer week within the calendar year
@@ -320,20 +278,11 @@ day.lookup$study.year.week <- study.year.week.id[1:(length(study.year.week.id) -
 write.csv(day.lookup, "Cleaned data/day_lookup.csv")
 
 #_______________________________________________________________________________________________
-# 7c. Create event variable ----
+# 6c. Create event variable ----
 
 # Mortalities and unknown censor events get a 1
 # all other observations get a zero
-
-# y.mort
-# ALL mortality events get a 1
-# unknown censors get an NA
-# all other observations get a zero
-
-# y.pred
-# confirmed predation and unknown mortalities get a 1
-# unknown censors get an NA
-# all other observations get a zero (including confirmed other mort types)
+# this is so we can easily retrieve what we need to predict on
 
 #_______________________________________________________________________________________________
 
@@ -350,7 +299,7 @@ fates.3 <- fates.3 %>%
   )
                     
 #_______________________________________________________________________________________________
-# 7d. Split dataset by events ----
+# 6d. Split dataset by events ----
 #_______________________________________________________________________________________________
 
 fates.4 <- survSplit(Surv(start,
@@ -362,16 +311,14 @@ fates.4 <- survSplit(Surv(start,
                      end = "end")
 
 #_______________________________________________________________________________________________
-# 7e. Mortality indicators ----
+# 6e. Mortality indicators ----
 
-# y.mort
+# SCENARIO 1 (all unknown censors remain zero) - y.mort.scen1
 # ALL mortality events get a 1
-# unknown censors get an NA
 # all other observations get a zero
 
-# y.pred
+# y.pred.scen1
 # confirmed predation and unknown mortalities get a 1
-# unknown censors get an NA
 # all other observations get a zero (including confirmed other mort types)
 
 #_______________________________________________________________________________________________
@@ -380,24 +327,20 @@ fates.4 <- fates.4 %>%
   
   mutate(
     
-    y.mort = ifelse(event == 1 & Event.type == "Mortality",
-                    1,
-                    ifelse(event == 1 & Event.type == "Censor" & General.cause == "Unknown",
-                           NA,
-                           0)),
+    y.mort.scen1 = ifelse(event == 1 & Event.type == "Mortality",
+                          1,
+                          0),
     
-    y.pred = ifelse(event == 1 & 
-                      Event.type == "Mortality" & 
-                      (General.cause == "Predation" | General.cause == "Unknown"),
-                    1,
-                    ifelse(event == 1 & Event.type == "Censor" & General.cause == "Unknown",
-                           NA,
-                           0))
+    y.pred.scen1 = ifelse(event == 1 & 
+                          Event.type == "Mortality" & 
+                          (General.cause == "Predation" | General.cause == "Unknown"),
+                          1,
+                          0)
     
   )
 
 #_______________________________________________________________________________________________
-# 7f. Create week variable and keep only columns we need ----
+# 6f. Create week variable and keep only columns we need ----
 #_______________________________________________________________________________________________
 
 # add correct "study.year.week" as a variable
@@ -423,8 +366,8 @@ fates.5 <- fates.4 %>%
                 start,
                 end,
                 event,
-                y.mort,
-                y.pred,
+                y.mort.scen1,
+                y.pred.scen1,
                 week,
                 Sex.1,
                 Collar.type.1,
@@ -439,69 +382,140 @@ fates.5 <- fates.4 %>%
                           end > 823 ~ 2025))
 
 #_______________________________________________________________________________________________
-# 8. Add treatment variable ----
+# 7. Add treatment variable ----
 #_______________________________________________________________________________________________
 
 # new df to manipulate
 fates.6 <- fates.5
 
 # here, we will use three indicator variables to estimate the effect of each treatment
-# compared to control (i.e., the intercept), while also accounting for pre- and post-treatment
+# compared to control (i.e., the intercept), while also accounting for  each year:
+# pre, post1, and post2
 # sensu Abele et al. (2013)
 
 # week 1 for 2A, 2B, 3A, and 3B
 # week 2 for 1A, 1B, 4A, and 4B
 
-fates.6$post.trt <- NA
-fates.6$trt.ret <- NA
-fates.6$trt.pil <- NA
+# assign indicators for each period
+fates.7 <- fates.6 %>%
+  
+  # join in study-year-week to make this easy
+  left_join(
+    
+    day.lookup %>% 
+      
+      dplyr::select(
+        
+        year,
+        study.year.week,
+        study.week
+        
+      ) %>%
+      
+      rename(week = study.year.week) %>%
+      
+      group_by(year, week) %>%
+      
+      slice(1) %>%
+      
+      ungroup()
+    
+  ) %>%
+  
+  # use study.week to assign indicators
+  mutate(
+    
+    # post 1
+    post1 = case_when(
+      
+      # 2 and 3
+      # pre-treatment
+      Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+      study.week < 53 ~ 0,
+      
+      # post-treatment 1
+      Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+      study.week >= 53 &
+      study.week <= 105 ~ 1,
+      
+      # post-treatment 2
+      Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+      study.week > 105 ~ 0,
+      
+      # 1 and 4
+      # pre-treatment
+      Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+      study.week <= 53 ~ 0,
+      
+      # post-treatment 1
+      Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+      study.week >= 54 &
+      study.week <= 106 ~ 1,
+      
+      # post-treatment 2
+      Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+      study.week > 106 ~ 0
+      
+       ),
+    
+    post2 = case_when(
+      
+      # 2 and 3
+      # pre-treatment
+      Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+      study.week < 53 ~ 0,
+      
+      # post-treatment 1
+      Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+      study.week >= 53 &
+      study.week <= 105 ~ 0,
+      
+      # post-treatment 2
+      Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+      study.week > 105 ~ 1,
+      
+      # 1 and 4
+      # pre-treatment
+      Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+      study.week <= 53 ~ 0,
+      
+      # post-treatment 1
+      Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+      study.week >= 54 &
+      study.week <= 106 ~ 0,
+      
+      # post-treatment 2
+      Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+      study.week > 106 ~ 1
+      
+    ),
+    
+    # assign treatments
+    ret = case_when(Site %in% c("1C", "2C", "3C", "4C") ~ 0,
+                    Site %in% c("1A", "2B", "3B", "4A") ~ 1,
+                    Site %in% c("1B", "2A", "3A", "4B") ~ 0),
+    
+    pil = case_when(Site %in% c("1C", "2C", "3C", "4C") ~ 0,
+                    Site %in% c("1A", "2B", "3B", "4A") ~ 0,
+                    Site %in% c("1B", "2A", "3A", "4B") ~ 1)
+    
+  ) %>%
+  
+  # remove study.week
+  dplyr::select(-study.week)
 
-# assign 0 for pre-treatment and 1 for post-treatment
-# 2 and 3
-fates.6$post.trt[fates.6$Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
-                 fates.6$week > 14 &
-                 fates.6$year == 2023] <- 0
-
-fates.6$post.trt[fates.6$Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
-                 fates.6$week >= 1 &
-                 fates.6$week <= 14 &
-                 fates.6$year == 2023] <- 1
-
-# 1 and 4
-fates.6$post.trt[fates.6$Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
-                 fates.6$week > 14 &
-                 fates.6$week == 1 &
-                 fates.6$year == 2023] <- 0
-
-fates.6$post.trt[fates.6$Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
-                 fates.6$week >= 2 &
-                 fates.6$week <= 14 &
-                 fates.6$year == 2023] <- 1
-
-# all remaining NAs should be 1
-fates.6$post.trt[is.na(fates.6$post.trt) == TRUE] <- 1
-
-# assign treatments
-# controls
-fates.6$trt.ret[fates.6$Site %in% c("1C", "2C", "3C", "4C")] <- 0
-fates.6$trt.pil[fates.6$Site %in% c("1C", "2C", "3C", "4C")] <- 0
-
-# retention
-fates.6$trt.ret[fates.6$Site %in% c("1A", "2B", "3B", "4A")] <- 1
-fates.6$trt.pil[fates.6$Site %in% c("1A", "2B", "3B", "4A")] <- 0
-
-# piling
-fates.6$trt.ret[fates.6$Site %in% c("1B", "2A", "3A", "4B")] <- 0
-fates.6$trt.pil[fates.6$Site %in% c("1B", "2A", "3A", "4B")] <- 1
 
 #_______________________________________________________________________________________________
-# 9. Add cluster variable (will be an index) ----
+# 9. Add index cluster site variables ----
 #_______________________________________________________________________________________________
 
-fates.6$cluster <- as.numeric(substr(fates.6$Site, 1, 1))
+fates.8 <- fates.7 %>% 
+  
+  mutate(cluster = as.numeric(substr(Site, 1, 1)),
+         site = as.integer(factor(Site)))
 
 #_______________________________________________________________________________________________
 # 10. Write to csv ----
 #_______________________________________________________________________________________________
 
-write.csv(fates.6, "Cleaned data/fates_final_cleaned.csv")
+write.csv(fates.8, "Cleaned data/fates_final_cleaned.csv")
