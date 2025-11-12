@@ -214,24 +214,34 @@ ggplot(data = fates.to.pred.1) +
                     ymax = upp.hdi,
                     color = scenario),
                 width = 0,
-                linewidth = 0.75) +
+                linewidth = 0.55) +
   
   geom_point(aes(x = unique.arrange,
                  y = med,
                  fill = scenario),
-             shape = 21) +
+             shape = 21,
+             size = 0.55) +
   
   theme(axis.text = element_text(color = "black"),
         panel.grid = element_blank(),
-        legend.position = "none",
+        legend.position = c(0.6, 0.2),
+        legend.title = element_blank(),
         axis.ticks.x = element_blank(),
         axis.text.x = element_blank(),
         axis.title.x = element_blank()) +
   
   ylab("Probability of mortality event") +
   
-  scale_fill_manual(values = c("darkgray", "purple", "orange")) +
-  scale_color_manual(values = c("darkgray", "purple", "orange"))
+  scale_fill_manual(values = c("darkgray", "purple", "orange"),
+                    labels = c("Always censored",
+                               "Mortality in scenarios 2 and 3",
+                               "Mortality in scenario 3")) +
+  scale_color_manual(values = c("darkgray", "purple", "orange"),
+                     labels = c("Always censored",
+                                "Mortality in scenarios 2 and 3",
+                                "Mortality in scenario 3"))
+
+# 380 x 350
 
 #_______________________________________________________________________________________________
 # 7. Flip outcomes in new dataset ----
