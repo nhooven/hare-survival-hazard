@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 12 Nov 2025 
 # Date completed: 12 Nov 2025 
-# Date last modified: 12 Nov 2025 
+# Date last modified: 13 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -329,6 +329,7 @@ fates.new.3 <- fates.new.2 %>%
     deployment.1,
     cluster,
     site,
+    sex_forest,
     MRID,
     Event.type,
     General.cause,
@@ -353,7 +354,10 @@ fates.new.3 <- fates.new.2 %>%
   # rename as needed
   rename(sex = Sex.1,
          collar = Collar.type.1,
-         mass = Final.mass)
+         mass = Final.mass) %>%
+  
+  # sex_forest as integer
+  mutate(sex_forest = as.integer(as.factor(sex_forest)))
 
 #_______________________________________________________________________________________________
 # 9. Write to .csv ----

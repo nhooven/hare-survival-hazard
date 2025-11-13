@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 12 Nov 2025 
+# Date last modified: 13 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -506,13 +506,18 @@ fates.7 <- fates.6 %>%
 
 
 #_______________________________________________________________________________________________
-# 9. Add index cluster site variables ----
+# 9. Add index cluster, site, and sex-forest type variables ----
 #_______________________________________________________________________________________________
 
 fates.8 <- fates.7 %>% 
   
   mutate(cluster = as.numeric(substr(Site, 1, 1)),
-         site = as.integer(factor(Site)))
+         site = as.integer(factor(Site)),
+         sex_forest = paste0(Sex.1, 
+                             "_",
+                             ifelse(Site %in% c("4A", "4B", "4C"),
+                                    "XMC",
+                                    "SFL")))
 
 #_______________________________________________________________________________________________
 # 10. Write to csv ----
