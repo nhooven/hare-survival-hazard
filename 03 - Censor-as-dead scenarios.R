@@ -1,6 +1,6 @@
 # Project: WSU Snowshoe Hare and PCT Project
 # Subproject: Survival and hazard modeling
-# Script: 02 - Censor-as-dead scenarios
+# Script: 03 - Censor-as-dead scenarios
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 12 Nov 2025 
@@ -21,7 +21,7 @@ library(bayestestR)
 # 2. Read in and prepare data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Cleaned data/fates_final_cleaned.csv")
+fates <- read.csv("Cleaned data/fates_final_cleaned_2.csv")
 
 # subset to those observations we'll fit the model to
 fates.1 <- fates %>% 
@@ -342,8 +342,8 @@ fates.new.3 <- fates.new.2 %>%
     week,
     Sex.1,
     Collar.type.1,
-    HFL,
-    Final.mass,
+    BCI.1,
+    BCI.2,
     post1,
     post2,
     ret,
@@ -353,8 +353,7 @@ fates.new.3 <- fates.new.2 %>%
   
   # rename as needed
   rename(sex = Sex.1,
-         collar = Collar.type.1,
-         mass = Final.mass) %>%
+         collar = Collar.type.1) %>%
   
   # sex_forest as integer
   mutate(sex_forest = as.integer(as.factor(sex_forest)))
