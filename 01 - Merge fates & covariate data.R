@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 13 Nov 2025 
+# Date last modified: 14 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -318,7 +318,7 @@ fates.4 <- survSplit(Surv(start,
 # all other observations get a zero
 
 # y.pred.scen1
-# confirmed predation and unknown mortalities get a 1
+# confirmed predation, trauma, and unknown (not predation) mortalities get a 1
 # all other observations get a zero (including confirmed other mort types)
 
 #_______________________________________________________________________________________________
@@ -331,13 +331,29 @@ fates.4 <- fates.4 %>%
                           1,
                           0),
     
-    y.pred.scen1 = ifelse(event == 1 & 
-                          Event.type == "Mortality" & 
-                          (General.cause == "Predation" | General.cause == "Unknown"),
-                          1,
-                          0)
-    
+    y.pred.scen1 = case_when(
+      
+      event == 0 ~ 0,
+      
+      event == 1 &
+        Event.type == "Censor" ~ 0,
+      
+      event == 1 & 
+        Event.type == "Mortality" &
+        (General.cause == "Predation" | General.cause == "Trauma") ~ 1,
+      
+      event == 1 & 
+        Event.type == "Mortality" &
+        (General.cause == "Unknown" & Specific.cause != "Not predation") ~ 1
+      
+    )
+  
   )
+
+# ensure all NAs are zero
+sum(is.na(fates.4$y.pred.scen1))
+
+fates.4$y.pred.scen1[is.na(fates.4$y.pred.scen1)] <- 0
 
 #_______________________________________________________________________________________________
 # 6f. Create week variable and keep only columns we need ----
