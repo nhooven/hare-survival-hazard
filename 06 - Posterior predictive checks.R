@@ -12,6 +12,7 @@
 # 0. Explanation ----
 #_______________________________________________________________________________________________
 
+# Bayesian p-value
 # Here we'll apply a simplified procedure outlined in Jones et al. 2020
 # For each week of our study, we'll use posterior draws to generate 
 # predictions for our Poisson intensities, then calculate the frequency of 
@@ -23,16 +24,17 @@
 # and look at how many iterations have more (conditional) simulated events than observed events
 # should be close to 0.5
 
+# Simulated lifetimes
+# Here we'll simulate lifetimes from a subset of posterior draws, create Kaplan-Meier
+# survivorship curves for each "population", then compare to the empirical K-M curve
+# I'll just need to snap every individual to the same starting place
+
 #_______________________________________________________________________________________________
 # 1. Load required packages ----
 #_______________________________________________________________________________________________
 
 library(tidyverse)       # manipulate and clean data
 library(mgcv)
-
-#_______________________________________________________________________________________________
-# 2. Read in data ----
-#_______________________________________________________________________________________________
 
 #_______________________________________________________________________________________________
 # 2. Read in data ----
@@ -162,15 +164,17 @@ bayes_p_mort <- function(
     # Poisson draw
     pois.draw = rpois(n = 1, intens)
     
-    # flip anything > 0 to 1
-    pois.draw.1 = ifelse(pois.draw > 0, 1, pois.draw)
+    # pack into a df
+    y.intens.pois <- data.frame(intens = intens,
+                                pois.draw = ifelse(pois.draw > 0, 1, pois.draw))
     
-    return(pois.draw.1)
+    return(y.intens.pois)
     
   }
   
   # loop through iterations
-  diff.all.draws <- vector(length = nrow(draws))
+  discrep.sim.all.draws <- vector(length = nrow(draws))
+  discrep.obs.all.draws <- vector(length = nrow(draws))
   
   for (i in 1:nrow(draws)) {
     
@@ -178,7 +182,8 @@ bayes_p_mort <- function(
     iter.draw <- draws[i, ]
     
     # loop through study.weeks
-    diff.study.week <- vector(length = max(fates.1$study.week))
+    discrep.sim <- vector(length = max(fates.1$study.week))
+    discrep.obs <- vector(length = max(fates.1$study.week))
     
     for (j in 1:max(fates.1$study.week)) {
       
@@ -190,17 +195,24 @@ bayes_p_mort <- function(
       # apply function
       sim.events <- do.call(rbind, lapply(indiv.split, calc_intensity))
       
-      # calculate the difference from observed
-      diff.study.week[j] = sum(sim.events) - sum(focal.week[[response]])
+      # determine the expected number of events
+      # this is just the sum of all intensities
+      e.events = sum(sim.events$intens)
+      
+      # calculate the conditional discrepancy
+      # Dj = ((sim/obs events - predicted events)^2) / predicted events
+      discrep.sim[j] = sum(((sim.events$pois.draw - sim.events$intens)^2) / sim.events$intens)
+      discrep.obs[j] = sum(((focal.week[[response]] - sim.events$intens)^2) / sim.events$intens)
       
     }
     
     # sum over all study.weeks
-    diff.all.draws[i] = sum(diff.study.week)
+    discrep.sim.all.draws[i] = sum(discrep.sim)
+    discrep.obs.all.draws[i] = sum(discrep.obs)
       
     # print status (every 100 iterations)
     
-    if (i %% 100 == 0) {
+    if (i %% 5 == 0) {
       
       print(paste0("Completed iteration ", i, " of ", nrow(draws))) 
       
@@ -208,7 +220,11 @@ bayes_p_mort <- function(
     
   }
   
-  return(diff.all.draws)
+  # bind together
+  discrep.sim.obs <- data.frame(sim = discrep.sim.all.draws,
+                                obs = discrep.obs.all.draws)
+  
+  return(discrep.sim.obs)
 
 }
 
@@ -221,14 +237,24 @@ bayes_p_mort <- function(
 
 bayes.diff <- bayes_p_mort(draws = draws, response = "y.mort.scen1")
 
+
+bayes.diff <- data.frame(
+  
+  sim = discrep.sim.all.draws,
+  obs = discrep.obs.all.draws,
+  diff = discrep.sim.all.draws - discrep.obs.all.draws
+  
+  )
+
 #_______________________________________________________________________________________________
 # 7. Plot and calculate Bayes p-value ----
 #_______________________________________________________________________________________________
 
-sum(bayes.diff > 0) / length(bayes.diff)
+length(which(bayes.diff$diff > 0)) / nrow(bayes.diff) # 0.4
 
-ggplot(data = as.data.frame(bayes.diff),
-       aes(x = bayes.diff)) +
+# distribution
+ggplot(data = bayes.diff,
+       aes(x = diff)) +
   
   theme_bw() +
   
@@ -242,6 +268,110 @@ ggplot(data = as.data.frame(bayes.diff),
         axis.title.y = element_blank(),
         axis.text.x = element_text(color = "black")) +
   
-  scale_x_continuous(breaks = c(-40, -20, 0, 20, 40)) +
+  xlab("Dsim - Dobs")
+
+# 1:1 plot
+ggplot(data = bayes.diff,
+       aes(x = obs,
+           y = sim)) +
   
-  xlab("Total simulated vs. observed mortalities")
+  theme_bw() +
+  
+  geom_point(shape = 21) +
+  
+  geom_abline(intercept = 0,
+              slope = 1,
+              linetype = "dashed") +
+  
+  xlab("Observed discrepancy") +
+  ylab("Simulated discrepancy") +
+  
+  coord_cartesian(xlim = c(5000, 9000),
+                  ylim = c(5000, 9000))
+
+#_______________________________________________________________________________________________
+# 8. Prepare dataset for Kaplan-Meier curves ----
+#_______________________________________________________________________________________________
+# 8a. Prepare empirical data ----
+
+# Here we'll keep everything the same, but include a "t" variable denoting the week from the beginning of 
+# monitoring per deployment
+
+#_______________________________________________________________________________________________
+
+# split by deployment
+fates.1.deploy.split <- split(fates.1, fates.1$deployment.1)
+
+# function to incorporate t since monitoring started
+add_t <- function (x) {
+  
+  x$t = 1:nrow(x)
+  
+  return(x)
+  
+}
+
+# apply
+fates.2 <- do.call(rbind, lapply(fates.1.deploy.split, add_t))
+
+#_______________________________________________________________________________________________
+# 8b. Write function ----
+
+# Ideally we can also use this within the simulation procedure
+# we'll need to split data based on t since deployment
+
+#_______________________________________________________________________________________________
+
+kap_mei <- function (
+    
+  x,
+  response = "y.mort.scen1"
+  
+  ) {
+  
+  # loop through all follow-up times
+  all.S <- vector(length = max(x$t))
+  s.i <- vector(length = max(x$t))
+  
+  all.S[1] = 1.0 # initialize at 100%
+  s.i[1] = 1.0 # initialize at 100%
+  
+  for (i in 2:max(x$t)) {
+    
+    # subset
+    indivs.i <- x[x$t == i, ]
+    
+    # calculate survival at interval
+    s.i[i] = 1 - (sum(indivs.i[[response]]) / nrow(indivs.i))
+    
+    # cumulative survival at interval
+    all.S[i] = prod(s.i[1:i])
+    
+  }
+  
+  # df for returning
+  km.df <- data.frame(t = 1:max(x$t),
+                      S = all.S)
+  
+  return(km.df)
+  
+}
+
+km.df <- kap_mei(fates.2)
+
+# plot
+ggplot(data = km.df,
+       aes(x = t,
+           y = S)) +
+  
+  theme_bw() +
+  
+  geom_line() +
+  
+  theme(panel.grid = element_blank()) +
+  
+  xlab("Weeks since deployment") +
+  
+  ylab("Cumulative survival") +
+  
+  coord_cartesian(ylim = c(0, 1))
