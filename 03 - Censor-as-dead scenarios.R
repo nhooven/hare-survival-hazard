@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 12 Nov 2025 
 # Date completed: 12 Nov 2025 
-# Date last modified: 14 Nov 2025 
+# Date last modified: 19 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -340,6 +340,7 @@ fates.new.3 <- fates.new.2 %>%
     y.pred.scen2,
     y.pred.scen3,
     week,
+    study.week,
     Sex.1,
     Collar.type.1,
     BCI.1,
