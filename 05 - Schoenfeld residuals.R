@@ -110,7 +110,7 @@ fates.1.post2 <- fates.1 %>% filter(post1 == 0 & post2 == 1)
 schoen_resid_bci <- function (
   
   x,
-  response,     # which variable should we look for 1s in?
+  response = "y.mort.scen1",     # which variable should we look for 1s in?
   ci = 0.90
   
   ) {
@@ -126,8 +126,10 @@ schoen_resid_bci <- function (
     # loop through all iterations
     for (i in 1:nrow(model.fit.1.hr)) {
   
-        rw.cov.vec.mean[i] <- mean(x$BCI.s * model.fit.1.hr$hr_bci[i]) 
-        rw.cov.vec.var[i] <- var(x$BCI.s * model.fit.1.hr$hr_bci[i]) 
+        rw.cov.vec.mean[i] <- mean(x$BCI.s * model.fit.1.hr$hr_bci[i] +
+                                   x$BCI.s * x$study.week.s * model.fit.1.hr$hr_bci_study_week[i]) 
+        rw.cov.vec.var[i] <- var(x$BCI.s * model.fit.1.hr$hr_bci[i] +
+                                 x$BCI.s * x$study.week.s * model.fit.1.hr$hr_bci_study_week[i]) 
       
     }
     
@@ -166,9 +168,9 @@ schoen_resid_bci <- function (
       
     }
     
+    return(schoen.df)
+    
   }
-  
-  return(schoen.df)
   
 }
 
@@ -181,8 +183,8 @@ schoen_resid_bci <- function (
 schoen_resid_trt <- function (
     
   x,
-  response,     # which variable should we look for 1s in?
-  post = 1,     # which period?
+  response = "y.mort.scen1",     # which variable should we look for 1s in?
+  post = 1,                      # which period?
   ci = 0.90
   
 ) {
@@ -281,9 +283,9 @@ schoen_resid_trt <- function (
     # bind together
     schoen.df <- rbind(schoen.df.ret, schoen.df.pil)
     
+    return(schoen.df)
+    
   }
-  
-  return(schoen.df)
   
 }
 
@@ -316,7 +318,27 @@ ggplot(data = schoen.bci.test) +
               method = "gam",
               se = T)
 
-# looks like we have a general trend over time. Interacting BCI with study.week could de-trend this!
+# we have a section of study.weeks that have way higher absolute residuals... why??
+# what does the general trend look like?
+ggplot(data = schoen.bci.test) +
+  
+  theme_bw() +
+  
+  geom_point(aes(x = study.week,
+                 y = med)) +
+  
+  geom_hline(yintercept = 0,
+             linetype = "dashed") +
+  
+  geom_smooth(aes(x = study.week,
+                  y = med),
+              method = "loess",
+              se = T) +
+  
+  coord_cartesian(ylim = c(-50, 50))
+
+# early on we see a strange trend, but this gets de-trended for the last 2/3 of the study
+# I can't explain this; we'll keep it for now
 
 #_______________________________________________________________________________________________
 # 5b. Treatment ----
@@ -362,3 +384,4 @@ ggplot(data = schoen.trt.all) +
   
   theme(legend.position = "none")
 
+# well, looks like we figured out the PH issue!

@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 18 Nov 2025 
+# Date last modified: 20 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -70,7 +70,6 @@ fates.1 <- fates %>%
       dplyr::select(
         
         year,
-        study.week,
         study.year.week
         
       ) %>%
@@ -86,7 +85,8 @@ fates.1 <- fates %>%
   ) %>%
   
   # standardize BCI.1
-  mutate(BCI.s = (BCI.1 - mean(BCI.1)) / sd(BCI.1))
+  mutate(BCI.s = (BCI.1 - mean(BCI.1)) / sd(BCI.1),
+         study.week.s = (study.week - mean(study.week)) / sd(study.week))
 
 #_______________________________________________________________________________________________
 # 3b. Spline for prediction ----
@@ -116,7 +116,7 @@ basis.pred <- cSplineDes(weeks.pred,
 fates.1.split <- split(fates.1, fates.1$study.week)
 
 #_______________________________________________________________________________________________
-# 5. Write Bayesian p-value function ----
+# 5. Bayesian p-value ----
 
 # lapply() was a good thought, but I think just looping by iteration and doing the summation
 # within the function is probably fine. We can also print the status by iteration
@@ -145,10 +145,11 @@ calc_intensity <- function (y) {
   
   # coefficient prediction (must be on the log scale!)
   coef.pred = exp(log(iter.draw$hr_bci) * y$BCI.s +
-                    log(iter.draw$hr_pil_total1) * y$post1 * y$pil +
-                    log(iter.draw$hr_pil_total2) * y$post2 * y$pil +
-                    log(iter.draw$hr_ret_total1) * y$post1 * y$ret +
-                    log(iter.draw$hr_ret_total2) * y$post2 * y$ret)
+                  log(iter.draw$hr_bci_study_week) * y$study.week.s * y$BCI.s +
+                  log(iter.draw$hr_pil_total1) * y$post1 * y$pil +
+                  log(iter.draw$hr_pil_total2) * y$post2 * y$pil +
+                  log(iter.draw$hr_ret_total1) * y$post1 * y$ret +
+                  log(iter.draw$hr_ret_total2) * y$post2 * y$ret)
   
   # total intensity
   intens = blh * coef.pred
@@ -166,94 +167,73 @@ calc_intensity <- function (y) {
 
 #_______________________________________________________________________________________________
 
-bayes_p_mort <- function(
-    
-  draws = model.fit.1,
-  response = "y.mort.scen1"
+draws = model.fit.1[sample(1:6000, 50), ]
+
+response = "y.mort.scen1"
+
+# loop through iterations
+discrep.sim.all.draws <- vector(length = nrow(draws))
+discrep.obs.all.draws <- vector(length = nrow(draws))
+
+for (i in 1:nrow(draws)) {
   
-  ) {
+  # iteration
+  iter.draw <- draws[i, ]
   
-  # loop through iterations
-  discrep.sim.all.draws <- vector(length = nrow(draws))
-  discrep.obs.all.draws <- vector(length = nrow(draws))
+  # loop through study.weeks
+  discrep.sim <- vector(length = max(fates.1$study.week))
+  discrep.obs <- vector(length = max(fates.1$study.week))
   
-  for (i in 1:nrow(draws)) {
+  for (j in 1:max(fates.1$study.week)) {
     
-    # iteration
-    iter.draw <- draws[i, ]
+    focal.week <- fates.1[fates.1$study.week == j, ]
     
-    # loop through study.weeks
-    discrep.sim <- vector(length = max(fates.1$study.week))
-    discrep.obs <- vector(length = max(fates.1$study.week))
+    # function to apply through all observations
+    indiv.split <- split(focal.week, focal.week$deployment.1)
     
-    for (j in 1:max(fates.1$study.week)) {
-      
-      focal.week <- fates.1[fates.1$study.week == j, ]
-      
-      # function to apply through all observations
-      indiv.split <- split(focal.week, focal.week$deployment.1)
-      
-      # apply function
-      sim.events <- do.call(rbind, lapply(indiv.split, calc_intensity))
-      
-      # determine the expected number of events
-      # this is just the sum of all intensities
-      e.events = sum(sim.events$intens)
-      
-      # calculate the conditional discrepancy
-      # Dj = ((sim/obs events - predicted events)^2) / predicted events
-      discrep.sim[j] = ((sum(sim.events$pois.draw) - sum(sim.events$intens))^2) / sum(sim.events$intens)
-      discrep.obs[j] = ((sum(focal.week[[response]]) - sum(sim.events$intens))^2) / sum(sim.events$intens)
-      
-      
-      
-    }
+    # apply function
+    sim.events <- do.call(rbind, lapply(indiv.split, calc_intensity))
     
-    # sum over all study.weeks
-    discrep.sim.all.draws[i] = sum(discrep.sim)
-    discrep.obs.all.draws[i] = sum(discrep.obs)
-      
-    # print status (every 100 iterations)
+    # determine the expected number of events
+    # this is just the sum of all intensities
+    e.events = sum(sim.events$intens)
     
-    if (i %% 5 == 0) {
-      
-      print(paste0("Completed iteration ", i, " of ", nrow(draws))) 
-      
-    }
+    # calculate the conditional discrepancy
+    # Dj = ((sim/obs events - predicted events)^2) / predicted events
+    discrep.sim[j] = ((sum(sim.events$pois.draw) - sum(sim.events$intens))^2) / sum(sim.events$intens)
+    discrep.obs[j] = ((sum(focal.week[[response]]) - sum(sim.events$intens))^2) / sum(sim.events$intens)
     
   }
   
-  # bind together
-  discrep.sim.obs <- data.frame(sim = discrep.sim.all.draws,
-                                obs = discrep.obs.all.draws)
+  # sum over all study.weeks
+  discrep.sim.all.draws[i] = sum(discrep.sim)
+  discrep.obs.all.draws[i] = sum(discrep.obs)
+    
+  # print status (every 100 iterations)
   
-  return(discrep.sim.obs)
-
+  if (i %% 5 == 0) {
+    
+    print(paste0("Completed iteration ", i, " of ", nrow(draws))) 
+    
+  }
+  
 }
 
-#_______________________________________________________________________________________________
-# 6. Apply function ----
-
-# for all posterior iterations, this would take a long time. Best to leave it overnight
-
-#_______________________________________________________________________________________________
-
-bayes.diff <- bayes_p_mort(draws = draws, response = "y.mort.scen1")
-
-
-bayes.diff <- data.frame(
-  
-  sim = discrep.sim.all.draws,
-  obs = discrep.obs.all.draws,
-  diff = discrep.sim.all.draws - discrep.obs.all.draws
-  
-  )
+# bind together
+bayes.diff <- data.frame(sim = discrep.sim.all.draws,
+                         obs = discrep.obs.all.draws)
 
 #_______________________________________________________________________________________________
-# 7. Plot and calculate Bayes p-value ----
+# 6. calculate Bayes p-value ----
 #_______________________________________________________________________________________________
+
+bayes.diff$diff = bayes.diff$sim - bayes.diff$obs
 
 length(which(bayes.diff$diff > 0)) / nrow(bayes.diff) # 0.12
+
+#_______________________________________________________________________________________________
+# 7. Plot ----
+#_______________________________________________________________________________________________
 
 # distribution
 ggplot(data = bayes.diff,
@@ -291,6 +271,8 @@ ggplot(data = bayes.diff,
   
   coord_cartesian(xlim = c(100, 250),
                   ylim = c(100, 250))
+
+# still doesn't fit exceedingly well
 
 #_______________________________________________________________________________________________
 # 8. Prepare dataset for Kaplan-Meier curves ----
@@ -429,10 +411,11 @@ calc_intensity_2 <- function (y) {
   
   # coefficient prediction (must be on the log scale!)
   coef.pred = exp(log(iter.draw$hr_bci) * y$BCI.s +
-                    log(iter.draw$hr_pil_total1) * y$post1 * y$pil +
-                    log(iter.draw$hr_pil_total2) * y$post2 * y$pil +
-                    log(iter.draw$hr_ret_total1) * y$post1 * y$ret +
-                    log(iter.draw$hr_ret_total2) * y$post2 * y$ret)
+                  log(iter.draw$hr_bci_study_week) * y$study.week.s * y$BCI.s +
+                  log(iter.draw$hr_pil_total1) * y$post1 * y$pil +
+                  log(iter.draw$hr_pil_total2) * y$post2 * y$pil +
+                  log(iter.draw$hr_ret_total1) * y$post1 * y$ret +
+                  log(iter.draw$hr_ret_total2) * y$post2 * y$ret)
   
   # total intensity
   intens = blh * coef.pred
@@ -493,6 +476,13 @@ sim_lifetime <- function (
           study.week = ifelse(study.week > 160,
                              (study.week - 160) + 4,    # so the correct week of the year will be attributed
                               study.week)
+          
+        ) %>%
+        
+        mutate(
+          
+          # standardize study.week
+          study.week.s = (study.week - mean(fates.1$study.week)) / sd(fates.1$study.week)
           
         ) %>%
         
@@ -599,7 +589,7 @@ sim_lifetime <- function (
 #_______________________________________________________________________________________________
 
 km.curves <- sim_lifetime(x = fates.2,
-                          draws = model.fit.1[sample(1:15000, size = 50), ])
+                          draws = model.fit.1[sample(1:6000, size = 50), ])
 
 #_______________________________________________________________________________________________
 # 10. Plot with empirical curve ----
@@ -640,3 +630,7 @@ ggplot() +
   
   coord_cartesian(ylim = c(0, 1),
                   xlim = c(4.25, 70))
+
+# 350 x 350
+
+# this looks even a bit better!
