@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 17 Nov 2025 
-# Date last modified: 14 Nov 2025 
+# Date last modified: 19 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -45,6 +45,7 @@ model.fit.1.hr <- model.fit.1 %>%
   dplyr::select(
     
     hr_bci,
+    hr_bci_study_week,
     hr_pil_total1,
     hr_pil_total2,
     hr_ret_total1,
@@ -68,7 +69,6 @@ fates.1 <- fates %>%
       dplyr::select(
         
         year,
-        study.week,
         study.year.week
         
         ) %>%
@@ -83,8 +83,9 @@ fates.1 <- fates %>%
     
   ) %>%
   
-  # standardize BCI.1
-  mutate(BCI.s = (BCI.1 - mean(BCI.1)) / sd(BCI.1))
+  # standardize BCI.1 and study.week
+  mutate(BCI.s = (BCI.1 - mean(BCI.1)) / sd(BCI.1),
+         study.week.s = (study.week - mean(study.week)) / sd(study.week))
 
 #_______________________________________________________________________________________________
 # 3c. Split dataset by study year ----
@@ -312,7 +313,7 @@ ggplot(data = schoen.bci.test) +
   
   geom_smooth(aes(x = study.week,
                   y = med),
-              method = "loess",
+              method = "gam",
               se = T)
 
 # looks like we have a general trend over time. Interacting BCI with study.week could de-trend this!
