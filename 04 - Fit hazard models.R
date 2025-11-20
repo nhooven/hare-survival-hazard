@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 
-# Date last modified: 14 Nov 2025 
+# Date last modified: 19 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -76,12 +76,13 @@ fates.1 <- list(
   y_pred_3 = fates$y.pred.scen3,
   
   # covariates
-  bci_1 = (fates$BCI.1 - mean(fates$BCI.1)) / sd(fates$BCI.1),   # we'll keep the first strategy for BCI
+  bci_1 = (fates$BCI.1 - mean(fates$BCI.1)) / sd(fates$BCI.1),   # standardized (center + scale)
   s_f = fates$sex_forest,
   post1 = fates$post1,
   post2 = fates$post2,
   ret = fates$ret,
   pil = fates$pil,
+  study_week = (fates$study.week - mean(fates$study.week)) / sd(fates$study.week),
   
   # spline
   basis = basis
@@ -100,6 +101,7 @@ params <- c("a0",
             "w",
             "lambda",
             "hr_bci",
+            "hr_bci_study_week",
             "hr_ret_total1", 
             "hr_ret_total2",
             "hr_pil_total1",
@@ -135,6 +137,7 @@ inits <- list(
   
   # coefficients
   b_bci = rnorm(1, 0, 2.5),
+  b_bci_study_week = rnorm(1, 0, 2.5),
   b_ret = rnorm(1, 0, 2.5),
   b_pil = rnorm(1, 0, 2.5),
   b_ret_post1 = rnorm(1, 0, 2.5),
@@ -167,8 +170,14 @@ model.code.1 <- nimbleCode({
   lambda_raw_sigma ~ dexp(rate = 1)
   
   # coefficients (Cauchy priors)
+  # extrinsic
+  #b_study_week ~ dt(0, sigma = 2.5, df = 1)   $ we won't use for now
+  
   # intrinsic 
   b_bci ~ dt(0, sigma = 2.5, df = 1)
+  
+  # intrinsic / extrinsic interactions
+  b_bci_study_week ~ dt(0, sigma = 2.5, df = 1)
   
   # treatment variables
   b_ret ~ dt(0, sigma = 2.5, df = 1)
@@ -227,6 +236,7 @@ model.code.1 <- nimbleCode({
       exp(
         
         b_bci * bci_1[i] +
+        b_bci_study_week * bci_1[i] * study_week[i] +
         b_ret * ret[i] + 
         b_ret_post1 * post1[i] * ret[i] +
         b_ret_post2 * post2[i] * ret[i] +
@@ -243,6 +253,7 @@ model.code.1 <- nimbleCode({
   
   # derived quantities (hazard ratios)
   hr_bci <- exp(b_bci)
+  hr_bci_study_week <- exp(b_bci_study_week)
   hr_ret_total1 <- exp(b_ret + b_ret_post1)
   hr_ret_total2 <- exp(b_ret + b_ret_post2)
   hr_pil_total1 <- exp(b_pil + b_pil_post1)
@@ -277,9 +288,9 @@ model.hmc.comp.1 <- compileNimble(model.hmc.1, project = model.1)
 model.fit.1 <- runMCMC(
   
   mcmc = model.hmc.comp.1,          
-  nchains = 3,                     # 3 chains should be fine
+  nchains = 2,                     # 3 chains should be fine (2 for test)
   nburnin = 1000,                  # probably doesn't need this many
-  niter = 6000,                    # should be more than enough with 3 chains
+  niter = 4000,                    # should be more than enough with >1 chains
   thin = 1,
   samplesAsCodaMCMC = TRUE
   
