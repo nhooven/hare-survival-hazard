@@ -24,6 +24,7 @@ library(tidyverse)       # manipulate and clean data
 
 # model samples
 model.fit.1 <- read.csv("Model outputs/model_1.csv")
+model.fit.2 <- read.csv("Model outputs/model_2.csv")
 
 # dataset
 fates <- read.csv("Cleaned data/fates_forModel.csv")
@@ -41,6 +42,20 @@ day.lookup <- read.csv("Cleaned data/day_lookup.csv")
 #_______________________________________________________________________________________________
 
 model.fit.1.hr <- model.fit.1 %>%
+  
+  dplyr::select(
+    
+    hr_bci,
+    hr_bci_study_week,
+    hr_pil_total1,
+    hr_pil_total2,
+    hr_ret_total1,
+    hr_ret_total2
+    
+  )
+
+# model 2
+model.fit.2.hr <- model.fit.2 %>%
   
   dplyr::select(
     
@@ -111,25 +126,30 @@ schoen_resid_bci <- function (
   
   x,
   response = "y.mort.scen1",     # which variable should we look for 1s in?
-  ci = 0.90
+  ci = 0.90,
+  scenario = 1
   
   ) {
+  
+  # which model fit to use?
+  model.fit.hr <- case_when(scenario == 1 ~ model.fit.1.hr,
+                            scenario == 2 ~ model.fit.2.hr)
   
   # only proceed if there are > 0 events
   if (1 %in% x[[response]]) {
     
     # calculate mean risk-weighted covariate value for each posterior HR draw
     # create blank vectors
-    rw.cov.vec.mean <- vector(length = nrow(model.fit.1.hr))    # mean
-    rw.cov.vec.var <- vector(length = nrow(model.fit.1.hr))    # variance
+    rw.cov.vec.mean <- vector(length = nrow(model.fit.hr))    # mean
+    rw.cov.vec.var <- vector(length = nrow(model.fit.hr))    # variance
     
     # loop through all iterations
-    for (i in 1:nrow(model.fit.1.hr)) {
+    for (i in 1:nrow(model.fit.hr)) {
   
-        rw.cov.vec.mean[i] <- mean(x$BCI.s * model.fit.1.hr$hr_bci[i] +
-                                   x$BCI.s * x$study.week.s * model.fit.1.hr$hr_bci_study_week[i]) 
-        rw.cov.vec.var[i] <- var(x$BCI.s * model.fit.1.hr$hr_bci[i] +
-                                 x$BCI.s * x$study.week.s * model.fit.1.hr$hr_bci_study_week[i]) 
+        rw.cov.vec.mean[i] <- mean(x$BCI.s * model.fit.hr$hr_bci[i] +
+                                   x$BCI.s * x$study.week.s * model.fit.hr$hr_bci_study_week[i]) 
+        rw.cov.vec.var[i] <- var(x$BCI.s * model.fit.hr$hr_bci[i] +
+                                 x$BCI.s * x$study.week.s * model.fit.hr$hr_bci_study_week[i]) 
       
     }
     
@@ -139,7 +159,7 @@ schoen_resid_bci <- function (
     
     # blank matrix
     schoen.matrix <- matrix(data = NA,
-                            nrow = nrow(model.fit.1.hr),
+                            nrow = nrow(model.fit.hr),
                             ncol = sum(x[[response]]))
     
     for (j in 1:sum(x[[response]])) {
@@ -185,19 +205,24 @@ schoen_resid_trt <- function (
   x,
   response = "y.mort.scen1",     # which variable should we look for 1s in?
   post = 1,                      # which period?
-  ci = 0.90
+  ci = 0.90,
+  scenario = 1
   
 ) {
+  
+  # which model fit to use?
+  model.fit.hr <- case_when(scenario == 1 ~ model.fit.1.hr,
+                            scenario == 2 ~ model.fit.2.hr)
   
   # only proceed if there are > 0 events
   if (1 %in% x[[response]]) {
     
     # calculate mean risk-weighted covariate value for each posterior HR draw
     # create blank vectors
-    rw.cov.vec.mean.ret <- vector(length = nrow(model.fit.1.hr))    # mean
-    rw.cov.vec.mean.pil <- vector(length = nrow(model.fit.1.hr))    # mean
-    rw.cov.vec.var.ret <- vector(length = nrow(model.fit.1.hr))    # variance
-    rw.cov.vec.var.pil <- vector(length = nrow(model.fit.1.hr))    # variance
+    rw.cov.vec.mean.ret <- vector(length = nrow(model.fit.hr))    # mean
+    rw.cov.vec.mean.pil <- vector(length = nrow(model.fit.hr))    # mean
+    rw.cov.vec.var.ret <- vector(length = nrow(model.fit.hr))    # variance
+    rw.cov.vec.var.pil <- vector(length = nrow(model.fit.hr))    # variance
     
     # loop through all iterations
     for (i in 1:nrow(model.fit.1.hr)) {
@@ -206,19 +231,19 @@ schoen_resid_trt <- function (
       
       if (post == 1) {
         
-        rw.cov.vec.mean.ret[i] <- mean(x$ret * model.fit.1.hr$hr_ret_total1[i]) 
-        rw.cov.vec.mean.pil[i] <- mean(x$pil * model.fit.1.hr$hr_pil_total1[i]) 
-        rw.cov.vec.var.ret[i] <- var(x$ret * model.fit.1.hr$hr_ret_total1[i]) 
-        rw.cov.vec.var.pil[i] <- var(x$pil * model.fit.1.hr$hr_pil_total1[i]) 
+        rw.cov.vec.mean.ret[i] <- mean(x$ret * model.fit.hr$hr_ret_total1[i]) 
+        rw.cov.vec.mean.pil[i] <- mean(x$pil * model.fit.hr$hr_pil_total1[i]) 
+        rw.cov.vec.var.ret[i] <- var(x$ret * model.fit.hr$hr_ret_total1[i]) 
+        rw.cov.vec.var.pil[i] <- var(x$pil * model.fit.hr$hr_pil_total1[i]) 
         
       }
       
       if (post == 2) {
         
-        rw.cov.vec.mean.ret[i] <- mean(x$ret * model.fit.1.hr$hr_ret_total2[i]) 
-        rw.cov.vec.mean.pil[i] <- mean(x$pil * model.fit.1.hr$hr_pil_total2[i]) 
-        rw.cov.vec.var.ret[i] <- var(x$ret * model.fit.1.hr$hr_ret_total2[i]) 
-        rw.cov.vec.var.pil[i] <- var(x$pil * model.fit.1.hr$hr_pil_total2[i])
+        rw.cov.vec.mean.ret[i] <- mean(x$ret * model.fit.hr$hr_ret_total2[i]) 
+        rw.cov.vec.mean.pil[i] <- mean(x$pil * model.fit.hr$hr_pil_total2[i]) 
+        rw.cov.vec.var.ret[i] <- var(x$ret * model.fit.hr$hr_ret_total2[i]) 
+        rw.cov.vec.var.pil[i] <- var(x$pil * model.fit.hr$hr_pil_total2[i])
         
       }
       
@@ -230,11 +255,11 @@ schoen_resid_trt <- function (
     
     # blank matrices
     schoen.matrix.ret <- matrix(data = NA,
-                                nrow = nrow(model.fit.1.hr),
+                                nrow = nrow(model.fit.hr),
                                 ncol = sum(x[[response]]))
     
     schoen.matrix.pil <- matrix(data = NA,
-                                nrow = nrow(model.fit.1.hr),
+                                nrow = nrow(model.fit.hr),
                                 ncol = sum(x[[response]]))
     
     for (j in 1:sum(x[[response]])) {
@@ -295,15 +320,24 @@ schoen_resid_trt <- function (
 # 5a. BCI ----
 #_______________________________________________________________________________________________
 
-# apply function
-schoen.bci.test <- do.call(rbind, 
-                           lapply(split(fates.1, fates.1$study.week), 
-                                  schoen_resid_bci,
-                                  response = "y.mort.scen1",
-                                  ci = 0.90))
+# model 1
+schoen.bci.test.1 <- do.call(rbind, 
+                             lapply(split(fates.1, fates.1$study.week), 
+                                    schoen_resid_bci,
+                                    response = "y.mort.scen1",
+                                    ci = 0.90,
+                                    scenario = 1))
+
+# model 2
+schoen.bci.test.2 <- do.call(rbind, 
+                             lapply(split(fates.1, fates.1$study.week), 
+                                    schoen_resid_bci,
+                                    response = "y.mort.scen2",
+                                    ci = 0.90,
+                                    scenario = 2))
 
 # plot test
-ggplot(data = schoen.bci.test) +
+ggplot(data = schoen.bci.test.2) +
   
   theme_bw() +
   
@@ -320,7 +354,7 @@ ggplot(data = schoen.bci.test) +
 
 # we have a section of study.weeks that have way higher absolute residuals... why??
 # what does the general trend look like?
-ggplot(data = schoen.bci.test) +
+ggplot(data = schoen.bci.test.2) +
   
   theme_bw() +
   
@@ -344,6 +378,7 @@ ggplot(data = schoen.bci.test) +
 # 5b. Treatment ----
 #_______________________________________________________________________________________________
 
+# model 1
 # apply function
 schoen.trt.post1 <- do.call(rbind, 
                            lapply(split(fates.1.post1, fates.1.post1$study.week), 
@@ -364,6 +399,51 @@ schoen.trt.all <- rbind(schoen.trt.post1, schoen.trt.post2)
 
 # plot test
 ggplot(data = schoen.trt.all) +
+  
+  theme_bw() +
+  
+  facet_wrap(~ trt) +
+  
+  geom_point(aes(x = study.week,
+                 y = med,
+                 color = as.factor(post))) +
+  
+  geom_hline(yintercept = 0,
+             linetype = "dashed") +
+  
+  geom_smooth(aes(x = study.week,
+                  y = med,
+                  group = as.factor(post)),
+              method = "gam",
+              se = T) +
+  
+  theme(legend.position = "none")
+
+# well, looks like we figured out the PH issue!
+
+# model 2
+# apply function
+schoen.trt.post1.2 <- do.call(rbind, 
+                            lapply(split(fates.1.post1, fates.1.post1$study.week), 
+                                   schoen_resid_trt,
+                                   response = "y.mort.scen2",
+                                   post = 1,
+                                   ci = 0.90,
+                                   scenario = 2))
+
+schoen.trt.post2.2 <- do.call(rbind, 
+                            lapply(split(fates.1.post2, fates.1.post2$study.week), 
+                                   schoen_resid_trt,
+                                   response = "y.mort.scen2",
+                                   post = 2,
+                                   ci = 0.90,
+                                   scenario = 2))
+
+# bind together for plotting
+schoen.trt.all.2 <- rbind(schoen.trt.post1.2, schoen.trt.post2.2)
+
+# plot test
+ggplot(data = schoen.trt.all.2) +
   
   theme_bw() +
   
