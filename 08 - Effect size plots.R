@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2025 
 # Date completed: 
-# Date last modified: 19 Nov 2025 
+# Date last modified: 21 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -23,6 +23,7 @@ library(bayestestR)      # highest density posterior intervals
 # model samples
 model.fit.1 <- read.csv("Model outputs/model_1.csv")
 model.fit.2 <- read.csv("Model outputs/model_2.csv")
+model.fit.3 <- read.csv("Model outputs/model_3.csv")
 
 #_______________________________________________________________________________________________
 # 3. Visualize covariate effects and evaluate strength of evidence ----
@@ -39,6 +40,13 @@ covariate.draws.1 <- model.fit.1 %>% dplyr::select(hr_bci,
                                                    hr_pil_total2)
 
 covariate.draws.2 <- model.fit.2 %>% dplyr::select(hr_bci,
+                                                   hr_bci_study_week,
+                                                   hr_ret_total1,
+                                                   hr_ret_total2,
+                                                   hr_pil_total1,
+                                                   hr_pil_total2)
+
+covariate.draws.3 <- model.fit.3 %>% dplyr::select(hr_bci,
                                                    hr_bci_study_week,
                                                    hr_ret_total1,
                                                    hr_ret_total2,
@@ -67,6 +75,26 @@ covariate.draws.long.1 <- covariate.draws.1 %>%
 
 # model 2
 covariate.draws.long.2 <- covariate.draws.2 %>% 
+  
+  pivot_longer(cols = hr_bci:hr_pil_total2) %>%
+  
+  # reorder factor
+  mutate(name = factor(name,
+                       levels = rev(c("hr_pil_total1",
+                                      "hr_pil_total2",
+                                      "hr_ret_total1",
+                                      "hr_ret_total2",
+                                      "hr_bci",
+                                      "hr_bci_study_week")),
+                       labels = rev(c("Piling (year 1)",
+                                      "Piling (year 2)",
+                                      "Retention (year 1)",
+                                      "Retention (year 2)",
+                                      "Body condition index",
+                                      "Body condition index * t"))))
+
+# model 3
+covariate.draws.long.3 <- covariate.draws.3 %>% 
   
   pivot_longer(cols = hr_bci:hr_pil_total2) %>%
   
@@ -156,6 +184,7 @@ extract_med_ci <- function (x) {
 # use function
 all.ci.1 <- extract_med_ci(covariate.draws.1)
 all.ci.2 <- extract_med_ci(covariate.draws.2)
+all.ci.3 <- extract_med_ci(covariate.draws.3)
 
 #_______________________________________________________________________________________________
 # 3c. Both density and point plots ----
@@ -303,6 +332,108 @@ ggplot() +
   
   # points
   geom_point(data = all.ci.2,
+             aes(x = med,
+                 y = var),
+             shape = 21,
+             color = "black",
+             fill = "white",
+             size = 2.5,
+             stroke = 1.1,
+             position = position_nudge(y = -0.1)) +
+  
+  # color
+  scale_fill_manual(values = c("lightgray",
+                               "lightgray",
+                               "darkgreen",
+                               "darkgreen",
+                               "darkgreen",
+                               "darkgreen")) +
+  
+  scale_color_manual(values = c("darkgray",
+                                "darkgray",
+                                "darkgreen",
+                                "darkgreen",
+                                "darkgreen",
+                                "darkgreen")) +
+  
+  # vertical line at 1
+  geom_vline(xintercept = 1,
+             linetype = "dashed",
+             color = "darkgray") +
+  
+  # axis titles
+  xlab("Hazard ratio") +
+  ylab("") +
+  
+  # x-axis scale
+  scale_x_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5, 3)) +
+  
+  # coordinates
+  coord_cartesian(xlim = c(0.35, 2.95),
+                  ylim = c(1.3, 6)) +
+  
+  # remove gridlines, remove legend
+  theme(panel.grid = element_blank(),
+        legend.position = "none",
+        axis.text = element_text(color = "black")) +
+  
+  # add text
+  annotate(geom = "text",
+           label = "Treatment",
+           x = 2.3, 
+           y = 6.35,
+           color = "darkgreen",
+           alpha = 0.5,
+           size = 5) +
+  
+  annotate(geom = "text",
+           label = "Intrinsic",
+           x = 2.35, 
+           y = 2.5,
+           color = "darkgray",
+           alpha = 0.75,
+           size = 5)
+
+# model 3
+# plot
+ggplot() +
+  
+  # white background
+  theme_bw() +
+  
+  # KDE
+  geom_density_ridges(data = covariate.draws.long.3,
+                      aes(x = value,
+                          y = name,
+                          fill = name),
+                      color = "#333333",
+                      alpha = 0.5,
+                      scale = 0.7,
+                      rel_min_height = 0.006) +     # remove tails
+  
+  # credible intervals
+  # 95%
+  geom_errorbarh(data = all.ci.3,
+                 aes(xmin = lo.1,
+                     xmax = up.1,
+                     y = var,
+                     color = var),
+                 alpha = 0.40,
+                 height = 0,
+                 linewidth = 2,
+                 position = position_nudge(y = -0.1)) +
+  # 50%
+  geom_errorbarh(data = all.ci.3,
+                 aes(xmin = lo.2,
+                     xmax = up.2,
+                     y = var,
+                     color = var),
+                 height = 0,
+                 linewidth = 2,
+                 position = position_nudge(y = -0.1)) +
+  
+  # points
+  geom_point(data = all.ci.3,
              aes(x = med,
                  y = var),
              shape = 21,

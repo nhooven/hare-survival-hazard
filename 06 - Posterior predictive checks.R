@@ -43,6 +43,7 @@ library(mgcv)
 # model samples
 model.fit.1 <- read.csv("Model outputs/model_1.csv")
 model.fit.2 <- read.csv("Model outputs/model_2.csv")
+model.fit.3 <- read.csv("Model outputs/model_3.csv")
 
 # dataset
 fates <- read.csv("Cleaned data/fates_forModel.csv")
@@ -168,9 +169,9 @@ calc_intensity <- function (y) {
 
 #_______________________________________________________________________________________________
 
-draws = model.fit.2[sample(1:6000, 50), ]
+draws = model.fit.3[sample(1:6000, 50), ]
 
-response = "y.mort.scen2"
+response = "y.mort.scen3"
 
 # loop through iterations
 discrep.sim.all.draws <- vector(length = nrow(draws))
@@ -364,8 +365,12 @@ km.df.1 <- kap_mei(fates.1,
 km.df.2 <- kap_mei(fates.2,
                    response = "y.mort.scen2")
 
+# model 2
+km.df.3 <- kap_mei(fates.2,
+                   response = "y.mort.scen3")
+
 # plot
-ggplot(data = km.df.2,
+ggplot(data = km.df.3,
        aes(x = t,
            y = S)) +
   
@@ -597,7 +602,7 @@ sim_lifetime <- function (
 #_______________________________________________________________________________________________
 
 km.curves <- sim_lifetime(x = fates.2,
-                          draws = model.fit.2[sample(1:6000, size = 50), ])
+                          draws = model.fit.3[sample(1:6000, size = 50), ])
 
 #_______________________________________________________________________________________________
 # 10. Plot with empirical curve ----
@@ -617,7 +622,7 @@ ggplot() +
             linewidth = 0.25) +
   
   # empirical curve confidence envelope
-  geom_ribbon(data = km.df.2,
+  geom_ribbon(data = km.df.3,
               aes(x = t,
                   y = S,
                   ymin = ci.low,
@@ -625,7 +630,7 @@ ggplot() +
               alpha = 0.15) +
   
   # empirical curve
-  geom_line(data = km.df.2,
+  geom_line(data = km.df.3,
             aes(x = t,
                 y = S)) +
   
@@ -642,3 +647,4 @@ ggplot() +
 # 350 x 350
 
 # this looks really good with scenario 2
+# scenario 3 is not as good
