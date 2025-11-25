@@ -4,7 +4,7 @@
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
-# Date completed: 
+# Date completed: 25 Nov 2025
 # Date last modified: 21 Nov 2025 
 # R version: 4.2.2
 
@@ -164,7 +164,7 @@ model.code.1 <- nimbleCode({
   
   # smoothing penalty
   lambda_raw_mean ~ dnorm(0, sd = 1)
-  lambda_raw_sigma ~ dexp(rate = 1)
+  lambda_raw_sigma ~ dexp(rate = 2)       # to help this sample, let's decrease this
   
   # coefficients (Cauchy priors)
   # extrinsic
@@ -190,18 +190,18 @@ model.code.1 <- nimbleCode({
   for (y in 1:nsf) {
     
     # cluster-specific intercepts
-    a0_z[y] ~ dnorm(0, 0.5)
+    a0_z[y] ~ dnorm(0, sd = 1)
     
     a0[y] <- a0_mean + a0_sigma * a0_z[y]
     
     # cluster-specific smoothing penalty parameter (lambda)
-    lambda_raw_z[y] ~ dnorm(0, sd = 0.5)
+    lambda_raw_z[y] ~ dnorm(0, sd = 1)
     
     lambda[y] <- exp(lambda_raw_mean + lambda_raw_sigma * lambda_raw_z[y])
     
     for (z in 1:nbasis) {
       
-      w_z[y, z] ~ dnorm(0, sd = 0.5)
+      w_z[y, z] ~ dnorm(0, sd = 1)
       
       w[y, z] <- w_mean + w_sigma * (w_z[y, z] / lambda[y])
       
@@ -285,9 +285,9 @@ model.hmc.comp.1 <- compileNimble(model.hmc.1, project = model.1)
 model.fit.1 <- runMCMC(
   
   mcmc = model.hmc.comp.1,          
-  nchains = 2,                     # 3 chains should be fine (2 for test)
+  nchains = 3,                     # 3 chains should be fine (2 for test)
   nburnin = 1000,                  # probably doesn't need this many
-  niter = 4000,                    # should be more than enough with >1 chains
+  niter = 6000,                    # should be more than enough with >1 chains
   thin = 1,
   samplesAsCodaMCMC = TRUE
   
@@ -327,7 +327,7 @@ model.code.2 <- nimbleCode({
   
   # smoothing penalty
   lambda_raw_mean ~ dnorm(0, sd = 1)
-  lambda_raw_sigma ~ dexp(rate = 1)
+  lambda_raw_sigma ~ dexp(rate = 2)       # to help this sample, let's decrease this
   
   # coefficients (Cauchy priors)
   # extrinsic
@@ -353,18 +353,18 @@ model.code.2 <- nimbleCode({
   for (y in 1:nsf) {
     
     # cluster-specific intercepts
-    a0_z[y] ~ dnorm(0, 0.5)
+    a0_z[y] ~ dnorm(0, sd = 1)
     
     a0[y] <- a0_mean + a0_sigma * a0_z[y]
     
     # cluster-specific smoothing penalty parameter (lambda)
-    lambda_raw_z[y] ~ dnorm(0, sd = 0.5)
+    lambda_raw_z[y] ~ dnorm(0, sd = 1)
     
     lambda[y] <- exp(lambda_raw_mean + lambda_raw_sigma * lambda_raw_z[y])
     
     for (z in 1:nbasis) {
       
-      w_z[y, z] ~ dnorm(0, sd = 0.5)
+      w_z[y, z] ~ dnorm(0, sd = 1)
       
       w[y, z] <- w_mean + w_sigma * (w_z[y, z] / lambda[y])
       
@@ -448,9 +448,9 @@ model.hmc.comp.2 <- compileNimble(model.hmc.2, project = model.2)
 model.fit.2 <- runMCMC(
   
   mcmc = model.hmc.comp.2,          
-  nchains = 2,                     # 3 chains should be fine (2 for test)
+  nchains = 3,                     # 3 chains should be fine (2 for test)
   nburnin = 1000,                  # probably doesn't need this many
-  niter = 4000,                    # should be more than enough with >1 chains
+  niter = 6000,                    # should be more than enough with >1 chains
   thin = 1,
   samplesAsCodaMCMC = TRUE
   
@@ -490,7 +490,7 @@ model.code.3 <- nimbleCode({
   
   # smoothing penalty
   lambda_raw_mean ~ dnorm(0, sd = 1)
-  lambda_raw_sigma ~ dexp(rate = 1)
+  lambda_raw_sigma ~ dexp(rate = 2)       # to help this sample, let's decrease this
   
   # coefficients (Cauchy priors)
   # extrinsic
@@ -516,18 +516,18 @@ model.code.3 <- nimbleCode({
   for (y in 1:nsf) {
     
     # cluster-specific intercepts
-    a0_z[y] ~ dnorm(0, 0.5)
+    a0_z[y] ~ dnorm(0, sd = 1)
     
     a0[y] <- a0_mean + a0_sigma * a0_z[y]
     
     # cluster-specific smoothing penalty parameter (lambda)
-    lambda_raw_z[y] ~ dnorm(0, sd = 0.5)
+    lambda_raw_z[y] ~ dnorm(0, sd = 1)
     
     lambda[y] <- exp(lambda_raw_mean + lambda_raw_sigma * lambda_raw_z[y])
     
     for (z in 1:nbasis) {
       
-      w_z[y, z] ~ dnorm(0, sd = 0.5)
+      w_z[y, z] ~ dnorm(0, sd = 1)
       
       w[y, z] <- w_mean + w_sigma * (w_z[y, z] / lambda[y])
       
@@ -611,9 +611,9 @@ model.hmc.comp.3 <- compileNimble(model.hmc.3, project = model.3)
 model.fit.3 <- runMCMC(
   
   mcmc = model.hmc.comp.3,          
-  nchains = 2,                     # 3 chains should be fine (2 for test)
+  nchains = 3,                     # 3 chains should be fine (2 for test)
   nburnin = 1000,                  # probably doesn't need this many
-  niter = 4000,                    # should be more than enough with >1 chains
+  niter = 6000,                    # should be more than enough with >1 chains
   thin = 1,
   samplesAsCodaMCMC = TRUE
   
