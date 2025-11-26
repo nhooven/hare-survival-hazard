@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 20 Nov 2025 
+# Date last modified: 25 Nov 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -169,9 +169,11 @@ calc_intensity <- function (y) {
 
 #_______________________________________________________________________________________________
 
-draws = model.fit.3[sample(1:6000, 50), ]
+# this takes over an hour to run 1,000 iterations. Best to leave overnight
 
-response = "y.mort.scen3"
+draws = model.fit.1
+
+response = "y.mort.scen1"
 
 # loop through iterations
 discrep.sim.all.draws <- vector(length = nrow(draws))
@@ -213,7 +215,7 @@ for (i in 1:nrow(draws)) {
     
   # print status (every 100 iterations)
   
-  if (i %% 5 == 0) {
+  if (i %% 100 == 0) {
     
     print(paste0("Completed iteration ", i, " of ", nrow(draws))) 
     
@@ -224,6 +226,14 @@ for (i in 1:nrow(draws)) {
 # bind together
 bayes.diff <- data.frame(sim = discrep.sim.all.draws,
                          obs = discrep.obs.all.draws)
+
+# 11-26-2025
+# I stopped it here at 
+nrow(bayes.diff[bayes.diff$sim > 0, ])
+# 9183
+
+# write to csv
+write.csv(bayes.diff, "In progress data/bayes_diff_scen1.csv")
 
 #_______________________________________________________________________________________________
 # 6. calculate Bayes p-value ----
