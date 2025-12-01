@@ -588,13 +588,25 @@ ggplot(data = covariate.draws.long.all) +
              position = position_nudge(y = -0.1)) +
   
   # colors and shapes
-  scale_fill_manual(values = scen.colors) +
+  scale_fill_manual(values = scen.colors,
+                    labels = c("Scenario 1",
+                               "Scenario 2",
+                               "Scenario 3")) +
   
-  scale_color_manual(values = scen.colors) +
+  scale_color_manual(values = scen.colors,
+                     labels = c("Scenario 1",
+                                "Scenario 2",
+                                "Scenario 3")) +
     
-  scale_shape_manual(values = scen.shapes) +
+  scale_shape_manual(values = scen.shapes,
+                     labels = c("Scenario 1",
+                                "Scenario 2",
+                                "Scenario 3")) +
   
-  scale_size_manual(values = c(1.5, 1.25, 1.25)) +
+  scale_size_manual(values = c(1.5, 1.25, 1.25),
+                    labels = c("Scenario 1",
+                               "Scenario 2",
+                               "Scenario 3")) +
   
   # vertical line at 1
   geom_vline(xintercept = 1,
@@ -622,7 +634,7 @@ ggplot(data = covariate.draws.long.all) +
                               vjust = 1),
     
     # legend
-    legend.position = c(0.85, 0.15),
+    legend.position = c(0.85, 0.16),
     legend.title = element_blank(),
     
     # panel border and gridlines
