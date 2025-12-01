@@ -4,8 +4,8 @@
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2025 
-# Date completed: 
-# Date last modified: 21 Nov 2025 
+# Date completed: 01 Dec 2025
+# Date last modified: 01 Dec 2025
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -71,7 +71,8 @@ covariate.draws.long.1 <- covariate.draws.1 %>%
                                       "Retention (year 1)",
                                       "Retention (year 2)",
                                       "Body condition index",
-                                      "Body condition index * t"))))
+                                      "Body condition index * t"))),
+         scen = "1")
 
 # model 2
 covariate.draws.long.2 <- covariate.draws.2 %>% 
@@ -91,7 +92,8 @@ covariate.draws.long.2 <- covariate.draws.2 %>%
                                       "Retention (year 1)",
                                       "Retention (year 2)",
                                       "Body condition index",
-                                      "Body condition index * t"))))
+                                      "Body condition index * t"))),
+         scen = "2")
 
 # model 3
 covariate.draws.long.3 <- covariate.draws.3 %>% 
@@ -111,7 +113,8 @@ covariate.draws.long.3 <- covariate.draws.3 %>%
                                       "Retention (year 1)",
                                       "Retention (year 2)",
                                       "Body condition index",
-                                      "Body condition index * t"))))
+                                      "Body condition index * t"))),
+         scen = "3")
 
 #_______________________________________________________________________________________________
 # 3b. Extract median and credible intervals ----
@@ -186,8 +189,13 @@ all.ci.1 <- extract_med_ci(covariate.draws.1)
 all.ci.2 <- extract_med_ci(covariate.draws.2)
 all.ci.3 <- extract_med_ci(covariate.draws.3)
 
+# add scen
+all.ci.1$scen = "1"
+all.ci.2$scen = "2"
+all.ci.3$scen = "3"
+
 #_______________________________________________________________________________________________
-# 3c. Both density and point plots ----
+# 4. By scenario ----
 #_______________________________________________________________________________________________
 
 # model 1
@@ -495,3 +503,145 @@ ggplot() +
            color = "darkgray",
            alpha = 0.75,
            size = 5)
+
+#_______________________________________________________________________________________________
+# 5. All scenarios ----
+
+# bind together
+covariate.draws.long.all <- rbind(covariate.draws.long.1,
+                                  covariate.draws.long.2,
+                                  covariate.draws.long.3)
+
+# variable name order
+covariate.draws.long.all$name <- factor(covariate.draws.long.all$name,
+                                        levels = c("Retention (year 1)",
+                                                   "Retention (year 2)",
+                                                   "Piling (year 1)",
+                                                   "Piling (year 2)",
+                                                   "Body condition index",
+                                                   "Body condition index * t"))
+
+all.ci.all <- rbind(all.ci.1,
+                    all.ci.2,
+                    all.ci.3)
+
+# change variable name
+colnames(all.ci.all)[6] <- "name"
+
+# we'll color and shape each one differently
+scen.colors <- c("gray", "red", "gold")
+scen.shapes <- c(21, 24, 22)
+
+#_______________________________________________________________________________________________
+
+# plot
+ggplot(data = covariate.draws.long.all) +
+  
+  # white background
+  theme_bw() +
+  
+  # facet
+  facet_wrap(~ name,
+             ncol = 2,
+             strip.position = "left") +
+  
+  # KDE
+  geom_density_ridges(data = covariate.draws.long.all,
+                      aes(x = value,
+                          y = rev(scen),
+                          fill = scen),
+                      color = "#333333",
+                      alpha = 0.5,
+                      scale = 0.7,
+                      rel_min_height = 0.006) +     # remove tails
+  
+  # credible intervals
+  # 95%
+  geom_errorbarh(data = all.ci.all,
+                 aes(xmin = lo.1,
+                     xmax = up.1,
+                     y = rev(scen),
+                     color = scen),
+                 alpha = 0.40,
+                 height = 0,
+                 linewidth = 2,
+                 position = position_nudge(y = -0.1)) +
+  # 50%
+  geom_errorbarh(data = all.ci.all,
+                 aes(xmin = lo.2,
+                     xmax = up.2,
+                     y = rev(scen),
+                     color = scen),
+                 height = 0,
+                 linewidth = 2,
+                 position = position_nudge(y = -0.1)) +
+  
+  # points
+  geom_point(data = all.ci.all,
+             aes(x = med,
+                 y = rev(scen),
+                 shape = scen,
+                 size = scen),
+             color = "black",
+             fill = "white",
+             stroke = 0.8,
+             position = position_nudge(y = -0.1)) +
+  
+  # colors and shapes
+  scale_fill_manual(values = scen.colors) +
+  
+  scale_color_manual(values = scen.colors) +
+    
+  scale_shape_manual(values = scen.shapes) +
+  
+  scale_size_manual(values = c(1.5, 1.25, 1.25)) +
+  
+  # vertical line at 1
+  geom_vline(xintercept = 1,
+             linetype = "dashed",
+             color = "gray45") +
+  
+  # axis titles
+  xlab("Hazard ratio") +
+  ylab("") +
+  
+  # x-axis scale
+  scale_x_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5, 3)) +
+  
+  # coordinates
+  coord_cartesian(xlim = c(0.35, 3.25),
+                  ylim = c(1.25, 3.25)) +
+  
+  # theme arguments
+  theme(
+    
+    # facet strip
+    strip.background = element_rect(fill = NA,
+                                    color = NA),
+    strip.text = element_text(hjust = 1,
+                              vjust = 1),
+    
+    # legend
+    legend.position = c(0.85, 0.15),
+    legend.title = element_blank(),
+    
+    # panel border and gridlines
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black"),
+    
+    # remove y-axis ticks and labels
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    
+    # black axis text
+    axis.text = element_text(color = "black")
+    
+    )
+
+# 598 x 490
+
+#_______________________________________________________________________________________________
+# 6. Write HDIs to clipboard ----
+#_______________________________________________________________________________________________
+
+write.table(all.ci.all, "clipboard", sep = "\t")
