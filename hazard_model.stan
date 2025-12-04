@@ -237,7 +237,7 @@ data {
       lambda_mort[i, j] = exp(a0_mean + (a0_sigma * a0_z[j]) + bw[i, j]) *  
                           exp(b_sex[j] * sex[i] +
                               //b_mas[j] * mas[i] +
-                              b_hfl[j] * mas[i] +
+                              b_hfl[j] * hfl[i] +
                               b_ret[j] * ret[i] + b_trt_ret[j] * trt[i] * ret[i] +
                               b_pil[j] * pil[i] + b_trt_pil[j] * trt[i] * pil[i]) ;
       
