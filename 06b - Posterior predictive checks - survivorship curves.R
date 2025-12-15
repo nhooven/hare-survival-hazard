@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 04 Dec 2025 
+# Date last modified: 15 Dec 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -24,6 +24,7 @@
 library(tidyverse)       # manipulate and clean data
 library(mgcv)
 library(tictoc)          # timing
+
 #_______________________________________________________________________________________________
 # 2. Read in data ----
 #_______________________________________________________________________________________________
@@ -464,30 +465,176 @@ for (i in 1:nrow(draws)) {
 }
 
 #_______________________________________________________________________________________________
-# 8. Plot with empirical curve ----
+# 8. Final survivorship curves for PPC
+#_______________________________________________________________________________________________
+# 8a. Read in data ----
+#_______________________________________________________________________________________________
 
-# here we'll use 2500 iterations
-some.km.curves <- all.km.curves %>% 
+km.1.1 <- read.csv(paste0(getwd(), "/KM curves/km_mod1_1.csv"))
+km.1.2 <- read.csv(paste0(getwd(), "/KM curves/km_mod1_2.csv"))
+km.2.1 <- read.csv(paste0(getwd(), "/KM curves/km_mod2_1.csv"))
+km.2.2 <- read.csv(paste0(getwd(), "/KM curves/km_mod2_2.csv"))
+km.3.1 <- read.csv(paste0(getwd(), "/KM curves/km_mod3_1.csv"))
+km.3.2 <- read.csv(paste0(getwd(), "/KM curves/km_mod3_2.csv"))
+
+#_______________________________________________________________________________________________
+# 8b. Join and summarize data ----
+#_______________________________________________________________________________________________
+
+km.1 <- rbind(km.1.1, km.1.2)
+km.2 <- rbind(km.2.1, km.2.2)
+km.3 <- rbind(km.3.1, km.3.2)
+
+# prediction envelopes
+km_pred <- function (x) {
   
-  group_by(iter) %>%
+  x.1 <- x %>%
+    
+    group_by(t) %>%
+    
+    mutate(med = median(S),
+           pe.low = quantile(S, prob = 0.025),
+           pe.upp = quantile(S, prob = 0.975)) %>%
+    
+    slice(1) %>%
+    
+    ungroup() %>%
+    
+    dplyr::select(t, med, pe.low, pe.upp)
   
-  slice(sample(1:max(all.km.curves$iter), 2500))
+  return(x.1)
+  
+}
+
+km.1.pred <- km_pred(km.1) 
+km.2.pred <- km_pred(km.2) 
+km.3.pred <- km_pred(km.3) 
+
+#_______________________________________________________________________________________________
+# 8c. Plot with empirical curve ----
+
+# using all the curves breaks the vector graphics
+# the upper and lower prediction envelopes seem reasonable
+
+# define theme
+km_theme <- function () {
+  
+  theme_bw() +
+    
+    theme(panel.grid = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_line(),
+          axis.text = element_text(color = "black"))
+  
+}
 
 #_______________________________________________________________________________________________
 
-# plot
-ggplot() +
+# scenario 1
+km.scen1 <- ggplot() +
   
-  theme_bw() +
+  km_theme() +
   
-  # simulated curves
-  geom_line(data = some.km.curves,
+  # simulated prediction envelopes
+  geom_line(data = km.1.pred,
             aes(x = t,
-                y = S,
-                group = iter),
-            color = "aquamarine3",
-            linewidth = 0.25,
-            alpha = 0.05) +
+                y = med),
+            color = "aquamarine4",
+            linewidth = 1) +
+  
+  geom_ribbon(data = km.1.pred,
+              aes(x = t,
+                  y = med,
+                  ymin = pe.low,
+                  ymax = pe.upp),
+              alpha = 0.35,
+              fill = "aquamarine4") +
+  
+  # empirical curve confidence envelope
+  geom_ribbon(data = km.df.1,
+              aes(x = t,
+                  y = S,
+                  ymin = ci.low,
+                  ymax = ci.upp),
+              alpha = 0.15,
+              color = "gray50",
+              fill = NA,
+              linetype = "dashed") +
+  
+  # empirical curve
+  geom_line(data = km.df.1,
+            aes(x = t,
+                y = S),
+            linetype = "dashed") +
+  
+  xlab("") +
+  ylab("Cumulative survival") +
+  
+  coord_cartesian(ylim = c(0, 1),
+                  xlim = c(4.25, 70))
+
+# scenario 2
+km.scen2 <- ggplot() +
+  
+  km_theme() +
+  
+  # simulated prediction envelopes
+  geom_line(data = km.2.pred,
+            aes(x = t,
+                y = med),
+            color = "aquamarine4",
+            linewidth = 1) +
+  
+  geom_ribbon(data = km.2.pred,
+              aes(x = t,
+                  y = med,
+                  ymin = pe.low,
+                  ymax = pe.upp),
+              alpha = 0.35,
+              fill = "aquamarine4") +
+  
+  # empirical curve confidence envelope
+  geom_ribbon(data = km.df.2,
+              aes(x = t,
+                  y = S,
+                  ymin = ci.low,
+                  ymax = ci.upp),
+              alpha = 0.15,
+              color = "gray50",
+              fill = NA,
+              linetype = "dashed") +
+  
+  # empirical curve
+  geom_line(data = km.df.2,
+            aes(x = t,
+                y = S),
+            linetype = "dashed") +
+  
+  xlab("Weeks since deployment") +
+  ylab("") +
+  
+  coord_cartesian(ylim = c(0, 1),
+                  xlim = c(4.25, 70))
+
+# scenario 3
+km.scen3 <- ggplot() +
+  
+  km_theme() +
+  
+  # simulated prediction envelopes
+  geom_line(data = km.3.pred,
+            aes(x = t,
+                y = med),
+            color = "aquamarine4",
+            linewidth = 1) +
+  
+  geom_ribbon(data = km.3.pred,
+              aes(x = t,
+                  y = med,
+                  ymin = pe.low,
+                  ymax = pe.upp),
+              alpha = 0.35,
+              fill = "aquamarine4") +
   
   # empirical curve confidence envelope
   geom_ribbon(data = km.df.3,
@@ -495,22 +642,33 @@ ggplot() +
                   y = S,
                   ymin = ci.low,
                   ymax = ci.upp),
-              alpha = 0.15) +
+              alpha = 0.15,
+              color = "gray50",
+              fill = NA,
+              linetype = "dashed") +
   
   # empirical curve
   geom_line(data = km.df.3,
             aes(x = t,
-                y = S)) +
+                y = S),
+            linetype = "dashed") +
   
-  theme(panel.grid = element_blank(),
-        axis.text = element_text(color = "black")) +
-  
-  xlab("Weeks since deployment") +
-  
-  ylab("Cumulative survival") +
+  xlab("") +
+  ylab("") +
   
   coord_cartesian(ylim = c(0, 1),
                   xlim = c(4.25, 70))
 
-# 350 x 350
+#_______________________________________________________________________________________________
+# 8d. Plot together ----
 
+library(cowplot)
+
+#_______________________________________________________________________________________________
+
+plot_grid(km.scen1, km.scen2, km.scen3,
+          nrow = 1,
+          labels = c("a", "b", "c"),
+          label_x = 0.92)
+
+# 900 x 300
