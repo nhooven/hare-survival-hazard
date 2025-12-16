@@ -4,8 +4,8 @@
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
-# Date completed: 
-# Date last modified: 15 Dec 2025 
+# Date completed: 16 Dec 2025 
+# Date last modified: 16 Dec 2025 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -161,8 +161,19 @@ haz_spline <- function (
                               sft.3.spline.summary,
                               sft.4.spline.summary)
   
+  # calculate hazard ratios FIRST on the full posterior predictions
+  # SFL is 3 / 1
+  # XMC is 4 / 2
+  SFL.hr.sex <- sft.3.spline / sft.1.spline
+  XMC.hr.sex <- sft.4.spline / sft.2.spline
+  
+  # make a list
+  spline.list <- list(all.spline.summary,
+                      SFL.hr.sex,
+                      XMC.hr.sex)
+  
   # return
-  return(all.spline.summary)
+  return(spline.list)
   
 }
 
@@ -212,9 +223,9 @@ spline_ft <- function(x) {
 }
 
 # apply function
-spline.ft.mod1 <- spline_ft(spline.summary.mod1)
-spline.ft.mod2 <- spline_ft(spline.summary.mod2)
-spline.ft.mod3 <- spline_ft(spline.summary.mod3)
+spline.ft.mod1 <- spline_ft(spline.summary.mod1[[1]])
+spline.ft.mod2 <- spline_ft(spline.summary.mod2[[1]])
+spline.ft.mod3 <- spline_ft(spline.summary.mod3[[1]])
 
 #_______________________________________________________________________________________________
 # 4b. Hazard ratios by sex ----
@@ -226,45 +237,38 @@ spline.ft.mod3 <- spline_ft(spline.summary.mod3)
 #_______________________________________________________________________________________________
 
 # function
-spline_sex <- function(x) {
+spline_sex <- function(
+    
+  x,
+  low = 0.025,
+  upp = 0.975
   
-  spline.summary.sex <- x %>%
+  ) {
+  
+  # SFL
+  spline.summary.sex <- bind_rows(
     
-    mutate(
-      
-      # t
-      t = rep(weeks.pred, times = 4),
-      
-      # forest type identifier
-      ft = ifelse(sft %in% c(1, 3),
-                  "SFL",
-                  "XMC"),
-      
-      # sex identifier
-      sex = ifelse(sft %in% c(1, 2),
-                   "F",
-                   "M")
-      
-      ) %>%
+    data.frame(
     
-    # drop sft
-    dplyr::select(-sft) %>%
+    t = weeks.pred,
+    hr.med = apply(x[[2]], 1, median),
+    hr.low = apply(x[[2]], 1, quantile, prob = low),
+    hr.upp = apply(x[[2]], 1, quantile, prob = upp),
+    ft = "SFL"
     
-    # pivot
-    pivot_wider(names_from = c(sex),
-                values_from = c(med, low, upp)) %>%
+  ),
+  
+  data.frame(
     
-    # calculate hazard ratios
-    mutate(
-      
-      hr.med = med_M / med_F,
-      hr.low = low_M / low_F,
-      hr.upp = upp_M / upp_F
-      
-    ) %>%
+    t = weeks.pred,
+    hr.med = apply(x[[3]], 1, median),
+    hr.low = apply(x[[3]], 1, quantile, prob = low),
+    hr.upp = apply(x[[3]], 1, quantile, prob = upp),
+    ft = "XMC"
     
-    # keep only columns we need
-    dplyr::select(t, ft, hr.med, hr.low, hr.upp)
+  )
+  
+)
     
   return(spline.summary.sex)
   
@@ -353,7 +357,7 @@ ggplot(data =
   scale_x_continuous(breaks = month.cutoffs$breaks + 2,
                      labels = month.cutoffs$labels) +
   
-  scale_y_continuous(breaks = c(0, 0.03, 0.06, 0.09, 0.12)) +
+  scale_y_continuous(breaks = c(0, 0.03, 0.06, 0.09, 0.12, 0.15)) +
   
   # axis labels
   ylab("Baseline hazard") +
@@ -427,7 +431,7 @@ ggplot(data =
   scale_x_continuous(breaks = month.cutoffs$breaks + 2,
                      labels = month.cutoffs$labels) +
   
-  scale_y_continuous(breaks = c(0, 0.03, 0.06, 0.09, 0.12)) +
+  scale_y_continuous(breaks = c(0, 0.03, 0.06, 0.09, 0.12, 0.15)) +
   
   # axis labels
   ylab("Baseline hazard") +
@@ -501,7 +505,7 @@ ggplot(data =
   scale_x_continuous(breaks = month.cutoffs$breaks + 2,
                      labels = month.cutoffs$labels) +
   
-  scale_y_continuous(breaks = c(0, 0.03, 0.06, 0.09, 0.12)) +
+  scale_y_continuous(breaks = c(0, 0.03, 0.06, 0.09, 0.12, 0.15)) +
   
   # axis labels
   ylab("Baseline hazard") +
@@ -560,19 +564,78 @@ ggplot(data =
              color = "gray") +
   
   # credible interval
-  geom_errorbar(aes(x = t,
-                    ymin = hr.low,
-                    ymax = hr.upp,
-                    color = Color),
-                width = 0,
-                linewidth = 1,
-                alpha = 0.5) +
+  geom_ribbon(aes(x = t,
+                  ymin = hr.low,
+                  ymax = hr.upp),
+              alpha = 0.2) +
   
-  # median
-  geom_point(aes(x = t,
-                 y = hr.med,
-                 color = Color),
-             size = 0.75) +
+  # medians
+  # underlying male line for continuity
+  geom_line(aes(x = t,
+                y = hr.med),
+            linewidth = 1.5,
+            color = "gray25") +
+  
+  # here' well split datasets based on whether the median is above or below 1
+  # males
+  geom_line(
+    
+    data = spline.sex.mod1 %>% mutate(
+      
+      # forest type factor labels
+      ft = factor(ft,
+                  levels = c("SFL", "XMC"),
+                  labels = c("a", "b"))
+      
+    ) %>%
+      
+      # filter
+      filter(hr.med >= 1),
+    
+    aes(x = t,
+        y = hr.med),
+        linewidth = 1.5,
+    color = "gray25") +
+  
+  # females (first segment)
+  geom_line(
+    
+    data = spline.sex.mod1 %>% mutate(
+      
+      # forest type factor labels
+      ft = factor(ft,
+                  levels = c("SFL", "XMC"),
+                  labels = c("a", "b"))
+      
+    ) %>%
+      
+      # filter
+      filter(hr.med <= 1 & t < 30),
+    
+    aes(x = t,
+        y = hr.med),
+    linewidth = 1.5,
+    color = "#FF3300") +
+  
+  # females (second segment)
+  geom_line(
+    
+    data = spline.sex.mod1 %>% mutate(
+      
+      # forest type factor labels
+      ft = factor(ft,
+                  levels = c("SFL", "XMC"),
+                  labels = c("a", "b"))
+      
+    ) %>%
+      
+      # filter
+      filter(hr.med <= 1 & t > 30),
+    
+    aes(x = t,
+        y = hr.med),
+    linewidth = 1.5,
+    color = "#FF3300") +
   
   # theme arguments
   theme(panel.grid = element_blank(),
@@ -600,10 +663,6 @@ ggplot(data =
   # axis labels
   scale_x_continuous(breaks = month.cutoffs$breaks + 2,
                      labels = month.cutoffs$labels) +
-  
-  scale_color_manual(values = c("gray25", "#FF3300")) +
-  
-  scale_y_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5)) +
   
   # axis labels
   ylab("M:F hazard ratio") +
@@ -654,19 +713,98 @@ ggplot(data =
              color = "gray") +
   
   # credible interval
-  geom_errorbar(aes(x = t,
-                    ymin = hr.low,
-                    ymax = hr.upp,
-                    color = Color),
-                width = 0,
-                linewidth = 1,
-                alpha = 0.5) +
+  geom_ribbon(aes(x = t,
+                  ymin = hr.low,
+                  ymax = hr.upp),
+              alpha = 0.2) +
   
-  # median
-  geom_point(aes(x = t,
-                 y = hr.med,
-                 color = Color),
-             size = 0.75) +
+  # medians
+  # underlying male line for continuity
+  geom_line(aes(x = t,
+                y = hr.med),
+            linewidth = 1.5,
+            color = "gray25") +
+  
+  # here' well split datasets based on whether the median is above or below 1
+  # males (first segment)
+  geom_line(
+    
+    data = spline.sex.mod2 %>% mutate(
+      
+      # forest type factor labels
+      ft = factor(ft,
+                  levels = c("SFL", "XMC"),
+                  labels = c("a", "b"))
+      
+    ) %>%
+      
+      # filter
+      filter(hr.med >= 1 & t < 10),
+    
+    aes(x = t,
+        y = hr.med),
+    linewidth = 1.5,
+    color = "gray25") +
+  
+  # males (second segment)
+  geom_line(
+    
+    data = spline.sex.mod2 %>% mutate(
+      
+      # forest type factor labels
+      ft = factor(ft,
+                  levels = c("SFL", "XMC"),
+                  labels = c("a", "b"))
+      
+    ) %>%
+      
+      # filter
+      filter(hr.med >= 1 & t > 10 & t < 40),
+    
+    aes(x = t,
+        y = hr.med),
+    linewidth = 1.5,
+    color = "gray25") +
+  
+  # females (first segment)
+  geom_line(
+    
+    data = spline.sex.mod2 %>% mutate(
+      
+      # forest type factor labels
+      ft = factor(ft,
+                  levels = c("SFL", "XMC"),
+                  labels = c("a", "b"))
+      
+    ) %>%
+      
+      # filter
+      filter(hr.med <= 1 & t < 30),
+    
+    aes(x = t,
+        y = hr.med),
+    linewidth = 1.5,
+    color = "#FF3300") +
+  
+  # females (second segment)
+  geom_line(
+    
+    data = spline.sex.mod2 %>% mutate(
+      
+      # forest type factor labels
+      ft = factor(ft,
+                  levels = c("SFL", "XMC"),
+                  labels = c("a", "b"))
+      
+    ) %>%
+      
+      # filter
+      filter(hr.med <= 1 & t > 30),
+    
+    aes(x = t,
+        y = hr.med),
+    linewidth = 1.5,
+    color = "#FF3300") +
   
   # theme arguments
   theme(panel.grid = element_blank(),
@@ -694,10 +832,6 @@ ggplot(data =
   # axis labels
   scale_x_continuous(breaks = month.cutoffs$breaks + 2,
                      labels = month.cutoffs$labels) +
-  
-  scale_color_manual(values = c("gray25", "#FF3300")) +
-  
-  scale_y_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5)) +
   
   # axis labels
   ylab("M:F hazard ratio") +
@@ -748,19 +882,118 @@ ggplot(data =
              color = "gray") +
   
   # credible interval
-  geom_errorbar(aes(x = t,
-                    ymin = hr.low,
-                    ymax = hr.upp,
-                    color = Color),
-                width = 0,
-                linewidth = 1,
-                alpha = 0.5) +
+  geom_ribbon(aes(x = t,
+                  ymin = hr.low,
+                  ymax = hr.upp),
+              alpha = 0.2) +
   
-  # median
-  geom_point(aes(x = t,
-                 y = hr.med,
-                 color = Color),
-             size = 0.75) +
+  # medians
+  # underlying male line for continuity
+  geom_line(aes(x = t,
+                y = hr.med),
+            linewidth = 1.5,
+            color = "gray25") +
+  
+  # here' well split datasets based on whether the median is above or below 1
+  # males (first segment)
+  geom_line(
+    
+    data = spline.sex.mod3 %>% mutate(
+      
+      # forest type factor labels
+      ft = factor(ft,
+                  levels = c("SFL", "XMC"),
+                  labels = c("a", "b"))
+      
+    ) %>%
+      
+      # filter
+      filter(hr.med >= 1 & t < 15),
+    
+    aes(x = t,
+        y = hr.med),
+    linewidth = 1.5,
+    color = "gray25") +
+  
+  # males (second segment)
+  geom_line(
+    
+    data = spline.sex.mod3 %>% mutate(
+      
+      # forest type factor labels
+      ft = factor(ft,
+                  levels = c("SFL", "XMC"),
+                  labels = c("a", "b"))
+      
+    ) %>%
+      
+      # filter
+      filter(hr.med >= 1 & t > 15),
+    
+    aes(x = t,
+        y = hr.med),
+    linewidth = 1.5,
+    color = "gray25") +
+  
+  # females (first segment)
+  geom_line(
+    
+    data = spline.sex.mod3 %>% mutate(
+      
+      # forest type factor labels
+      ft = factor(ft,
+                  levels = c("SFL", "XMC"),
+                  labels = c("a", "b"))
+      
+    ) %>%
+      
+      # filter
+      filter(hr.med <= 1 & t < 10),
+    
+    aes(x = t,
+        y = hr.med),
+    linewidth = 1.5,
+    color = "#FF3300") +
+  
+  # females (second segment)
+  geom_line(
+    
+    data = spline.sex.mod3 %>% mutate(
+      
+      # forest type factor labels
+      ft = factor(ft,
+                  levels = c("SFL", "XMC"),
+                  labels = c("a", "b"))
+      
+    ) %>%
+      
+      # filter
+      filter(hr.med <= 1 & t > 15 & t < 30),
+    
+    aes(x = t,
+        y = hr.med),
+    linewidth = 1.5,
+    color = "#FF3300") +
+  
+  # females (third segment)
+  geom_line(
+    
+    data = spline.sex.mod3 %>% mutate(
+      
+      # forest type factor labels
+      ft = factor(ft,
+                  levels = c("SFL", "XMC"),
+                  labels = c("a", "b"))
+      
+    ) %>%
+      
+      # filter
+      filter(hr.med <= 1 & t > 30),
+    
+    aes(x = t,
+        y = hr.med),
+    linewidth = 1.5,
+    color = "#FF3300") +
   
   # theme arguments
   theme(panel.grid = element_blank(),
@@ -789,10 +1022,6 @@ ggplot(data =
   scale_x_continuous(breaks = month.cutoffs$breaks + 2,
                      labels = month.cutoffs$labels) +
   
-  scale_color_manual(values = c("gray25", "#FF3300")) +
-  
-  scale_y_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5)) +
-  
   # axis labels
   ylab("M:F hazard ratio") +
   
@@ -801,5 +1030,3 @@ ggplot(data =
 
 # 342 x 589
 
-# must be some small calculation error causing medians to fall outside the 
-# 95% CIs here. Not a huge deal - worse to worst we can just show the intervals
