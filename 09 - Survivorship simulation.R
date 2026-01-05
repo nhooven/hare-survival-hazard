@@ -4,8 +4,8 @@
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 31 Dec 2025 
-# Date completed: 
-# Date last modified: 02 Jan 2026
+# Date completed: 05 Jan 2026
+# Date last modified: 05 Jan 2026
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -30,7 +30,6 @@
 library(tidyverse)       # manipulate and clean data
 library(mgcv)
 library(tictoc)          # timing
-library(bayestestR)
 
 #_______________________________________________________________________________________________
 # 2. Read in data ----
@@ -198,6 +197,16 @@ set.1b <- data.frame(
   )
 
 #_______________________________________________________________________________________________
+# 4b. Partial exposure ----
+
+# treatments here start at week 1
+# but we start monitoring animals at week of year 40
+
+# 01-05-2026 - We can try this later if people think it's necessary
+
+#_______________________________________________________________________________________________
+
+#_______________________________________________________________________________________________
 # 5. Spline for prediction ----
 #_______________________________________________________________________________________________
 
@@ -337,11 +346,11 @@ calc_intensity_2 <- function (
 }
 
 # function to simulate lifetimes
-sim_lifetime_byDeploy <- function (z) {
+sim_lifetime_byDeploy <- function (z, v, i) {
   
   # calculate intensity and bind
   z.1 <- cbind(z, calc_intensity_2(y = z,
-                                   v = iter.draw))
+                                   v))
   
   # extract lifetime
   focal.lifetime <- data.frame(
@@ -371,7 +380,7 @@ sim_lifetime_byDeploy <- function (z) {
 set.1a.split <- split(set.1a, set.1a$indiv)
 set.1b.split <- split(set.1b, set.1b$indiv)
 
-draws = model.fit.2 %>% slice(sample(1:n(), size = 10))
+draws = model.fit.2 %>% slice(sample(1:n(), size = 1000))
 
 #_______________________________________________________________________________________________
 
@@ -388,11 +397,13 @@ all.km.curves <- data.frame()
 
 for (i in 1:nrow(draws)) {
   
-  iter.draw = draws[i, ]
+  iter.draw <- draws[i, ]
   
   # apply function to each deployment
   all.iter.lifetimes <- do.call(rbind, lapply(set.split, 
-                                              sim_lifetime_byDeploy))
+                                              sim_lifetime_byDeploy,
+                                              v = iter.draw,
+                                              i = i))
   
   
   # calculate K-M curve
@@ -443,7 +454,10 @@ for (i in 1:nrow(draws)) {
 tic()
 set.1a.km <- sim_survivorship(draws, set.1a.split)
 toc()
+
+tic()
 set.1b.km <- sim_survivorship(draws, set.1b.split)
+toc()
 
 # ~ 22 seconds for 10 iterations
 # 1000 iterations would take ~ 40 minutes
@@ -461,29 +475,25 @@ extract_surv <- function (
   weeks = c(26, 52, 78),
   ci = 0.95) {
   
-  surv.ci <- data.frame()
+  set.km.summary <- set.km %>%
+    
+    # filter by weeks
+    filter(t %in% weeks) %>%
+    
+    group_by(t, trt) %>%
+    
+    # summarize
+    summarize(
+      
+      median = median(S),
+      
+      low = quantile(S, probs = (1 - ci) / 2),
+      
+      upp = quantile(S, probs = 1 - (1 - ci) / 2),
+      
+    )
   
-  for (i in 1:length(weeks)) {
-    
-    focal.surv.ci <- data.frame(week = NA,
-                                median = NA,
-                                low = NA,
-                                upp = NA)
-    
-    focal.surv.ci$week = weeks[i]
-    
-    focal.surv.ci$median = median(set.km$S[set.km$t == weeks[i]])
-    
-    focal.surv.ci$low = quantile(set.km$S[set.km$t == weeks[i]], probs = (1 - ci) / 2)
-    
-    focal.surv.ci$upp = quantile(set.km$S[set.km$t == weeks[i]], probs = 1 - (1 - ci) / 2)
-    
-    # bind in 
-    surv.ci <- rbind(surv.ci, focal.surv.ci)
-    
-  }
-  
-  return(surv.ci)
+  return(set.km.summary)
   
 }
 
@@ -512,7 +522,67 @@ km_pred <- function (x) {
 # 7b. Summarize and plot CIs ----
 #_______________________________________________________________________________________________
 
-extract_surv(set.1a.km)
+set.1.summary <- rbind(
+  
+  extract_surv(set.1a.km) %>%
+    
+    mutate(forest = "SFL"),
+  
+  extract_surv(set.1b.km) %>%
+    
+    mutate(forest = "XMC")
+  
+)
+
+# labels
+set.1.summary <- set.1.summary %>%
+  
+  mutate(t = factor(t, levels = c(26, 52, 78),
+                    labels = c("26 weeks", 
+                                  "52 weeks",
+                                  "78 weeks")),
+         forest = factor(forest, levels = c("SFL",
+                                            "XMC"),
+                                 labels = c("spruce-fir-lodgepole",
+                                            "xeric mixed conifer")))
+
+# plot
+ggplot(data = set.1.summary) +
+  
+  theme_bw() +
+  
+  facet_grid(forest ~ t) +
+  
+  geom_errorbar(aes(x = trt,
+                    ymin = low,
+                    ymax = upp,
+                    color = trt),
+                width = 0,
+                linewidth = 1.5) +
+  
+  geom_point(aes(x = trt,
+                 y = median,
+                 fill = trt),
+             shape = 21,
+             size = 3) +
+  
+  theme(panel.grid = element_blank(),
+        axis.text = element_text(color = "black"),
+        legend.position = "none",
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 45,
+                                   hjust = 1),
+        strip.background = element_rect(fill = "white"),
+        strip.text = element_text(hjust = 0)) +
+  
+  coord_cartesian(ylim = c(0, 1)) +
+  
+  ylab("Cumulative survival") +
+  
+  scale_x_discrete(labels = c("control", "piling", "retention")) +
+  
+  scale_color_manual(values = c("gray75", "orange", "purple")) +
+  scale_fill_manual(values = c("gray75", "orange", "purple"))
 
 #_______________________________________________________________________________________________
 # 7c. Plot KM curves ----
@@ -522,10 +592,15 @@ extract_surv(set.1a.km)
 set.1a.km.pred <- km_pred(set.1a.km)
 set.1b.km.pred <- km_pred(set.1b.km)
 
+# add forest type
+set.1a.km$forest <- "SFL"
+set.1b.km$forest <- "XMC"
+
 set.1a.km.pred$forest <- "SFL"
 set.1b.km.pred$forest <- "XMC"
 
 # bind together
+set.1.km <- rbind(set.1a.km, set.1b.km)
 set.1.km.pred <- rbind(set.1a.km.pred, set.1b.km.pred)
 
 # plot
@@ -536,6 +611,7 @@ ggplot() +
   facet_wrap(~ forest,
              nrow = 2) +
   
+  # prediction intervals
   geom_ribbon(data = set.1.km.pred,
               aes(x = t,
                   y = med,
@@ -569,7 +645,12 @@ ggplot() +
   xlab("Week") +
   ylab("Cumulative survival") +
   
-  coord_cartesian(xlim = c(0, 97)) +
+  coord_cartesian(xlim = c(5.5, 97)) +
+  
+  scale_x_continuous(breaks = c(13, 26, 39, 52, 65, 78, 92)) +
   
   scale_color_manual(values = c("gray75", "orange", "purple")) +
   scale_fill_manual(values = c("gray75", "orange", "purple"))
+
+# well, doesn't look like treatments do much here
+# next, we could start all our animals at year 2
