@@ -1,16 +1,12 @@
 # Project: WSU Snowshoe Hare and PCT Project
 # Subproject: Survival and hazard modeling
-# Script: 05 - Schoenfeld residuals
+# Script: 06 - Schoenfeld residuals
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 17 Nov 2025 
-# Date last modified: 19 Nov 2025 
+# Date last modified: 22 Jan 2026 
 # R version: 4.2.2
-
-#_______________________________________________________________________________________________
-# 0. Explanation ----
-#_______________________________________________________________________________________________
 
 #_______________________________________________________________________________________________
 # 1. Load required packages ----
@@ -23,8 +19,9 @@ library(tidyverse)       # manipulate and clean data
 #_______________________________________________________________________________________________
 
 # model samples
-model.fit.1 <- read.csv("Model outputs/model_1.csv")
-model.fit.2 <- read.csv("Model outputs/model_2.csv")
+model.fit.1 <- readRDS("Model outputs/model_1.rds")
+model.fit.2 <- readRDS("Model outputs/model_2.rds")
+model.fit.3 <- readRDS("Model outputs/model_3.rds")
 
 # dataset
 fates <- read.csv("Cleaned data/fates_forModel.csv")
@@ -39,34 +36,34 @@ day.lookup <- read.csv("Cleaned data/day_lookup.csv")
 # 3. Prepare data ----
 #_______________________________________________________________________________________________
 # 3a. Hazard ratios ----
+
+# function to turn mcmc.list into df and select only columns we need
+extract_hr <- function (x) {
+  
+  x.1 <- do.call(rbind, x)
+  
+  x.1.hr <- as.data.frame(x.1) %>%
+    
+    dplyr::select(
+      
+      hr_bci,
+      hr_bci_study_week,
+      hr_pil_total1,
+      hr_pil_total2,
+      hr_ret_total1,
+      hr_ret_total2
+      
+    )
+  
+  return(x.1.hr)
+  
+}
+
 #_______________________________________________________________________________________________
 
-model.fit.1.hr <- model.fit.1 %>%
-  
-  dplyr::select(
-    
-    hr_bci,
-    hr_bci_study_week,
-    hr_pil_total1,
-    hr_pil_total2,
-    hr_ret_total1,
-    hr_ret_total2
-    
-  )
-
-# model 2
-model.fit.2.hr <- model.fit.2 %>%
-  
-  dplyr::select(
-    
-    hr_bci,
-    hr_bci_study_week,
-    hr_pil_total1,
-    hr_pil_total2,
-    hr_ret_total1,
-    hr_ret_total2
-    
-  )
+model.fit.1.hr <- extract_hr(model.fit.1)
+model.fit.2.hr <- extract_hr(model.fit.2)
+model.fit.3.hr <- extract_hr(model.fit.3)
 
 #_______________________________________________________________________________________________
 # 3b. Attribute study-week to fates df ----
@@ -133,7 +130,8 @@ schoen_resid_bci <- function (
   
   # which model fit to use?
   model.fit.hr <- case_when(scenario == 1 ~ model.fit.1.hr,
-                            scenario == 2 ~ model.fit.2.hr)
+                            scenario == 2 ~ model.fit.2.hr,
+                            scenario == 3 ~ model.fit.3.hr)
   
   # only proceed if there are > 0 events
   if (1 %in% x[[response]]) {
@@ -212,7 +210,8 @@ schoen_resid_trt <- function (
   
   # which model fit to use?
   model.fit.hr <- case_when(scenario == 1 ~ model.fit.1.hr,
-                            scenario == 2 ~ model.fit.2.hr)
+                            scenario == 2 ~ model.fit.2.hr,
+                            scenario == 3 ~ model.fit.3.hr)
   
   # only proceed if there are > 0 events
   if (1 %in% x[[response]]) {
@@ -336,8 +335,16 @@ schoen.bci.test.2 <- do.call(rbind,
                                     ci = 0.90,
                                     scenario = 2))
 
+# model 3
+schoen.bci.test.3 <- do.call(rbind, 
+                             lapply(split(fates.1, fates.1$study.week), 
+                                    schoen_resid_bci,
+                                    response = "y.mort.scen3",
+                                    ci = 0.90,
+                                    scenario = 3))
+
 # plot test
-ggplot(data = schoen.bci.test.2) +
+ggplot(data = schoen.bci.test.3) +
   
   theme_bw() +
   
@@ -352,27 +359,7 @@ ggplot(data = schoen.bci.test.2) +
               method = "gam",
               se = T)
 
-# we have a section of study.weeks that have way higher absolute residuals... why??
-# what does the general trend look like?
-ggplot(data = schoen.bci.test.2) +
-  
-  theme_bw() +
-  
-  geom_point(aes(x = study.week,
-                 y = med)) +
-  
-  geom_hline(yintercept = 0,
-             linetype = "dashed") +
-  
-  geom_smooth(aes(x = study.week,
-                  y = med),
-              method = "loess",
-              se = T) +
-  
-  coord_cartesian(ylim = c(-50, 50))
-
-# early on we see a strange trend, but this gets de-trended for the last 2/3 of the study
-# I can't explain this; we'll keep it for now
+# we successfully de-trended these
 
 #_______________________________________________________________________________________________
 # 5b. Treatment ----
@@ -464,4 +451,46 @@ ggplot(data = schoen.trt.all.2) +
   
   theme(legend.position = "none")
 
-# well, looks like we figured out the PH issue!
+# model 3
+# apply function
+schoen.trt.post1.3 <- do.call(rbind, 
+                              lapply(split(fates.1.post1, fates.1.post1$study.week), 
+                                     schoen_resid_trt,
+                                     response = "y.mort.scen3",
+                                     post = 1,
+                                     ci = 0.90,
+                                     scenario = 3))
+
+schoen.trt.post2.3 <- do.call(rbind, 
+                              lapply(split(fates.1.post2, fates.1.post2$study.week), 
+                                     schoen_resid_trt,
+                                     response = "y.mort.scen3",
+                                     post = 2,
+                                     ci = 0.90,
+                                     scenario = 3))
+
+# bind together for plotting
+schoen.trt.all.3 <- rbind(schoen.trt.post1.3, schoen.trt.post2.3)
+
+# plot test
+ggplot(data = schoen.trt.all.3) +
+  
+  theme_bw() +
+  
+  facet_wrap(~ trt) +
+  
+  geom_point(aes(x = study.week,
+                 y = med,
+                 color = as.factor(post))) +
+  
+  geom_hline(yintercept = 0,
+             linetype = "dashed") +
+  
+  geom_smooth(aes(x = study.week,
+                  y = med,
+                  group = as.factor(post)),
+              method = "gam",
+              se = T) +
+  
+  theme(legend.position = "none")
+
