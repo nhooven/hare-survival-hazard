@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 25 Nov 2025
-# Date last modified: 21 Nov 2025 
+# Date last modified: 22 Jan 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -54,18 +54,16 @@ basis <- cSplineDes(fates$week,
 constants = list(
   
   N = nrow(fates),              
-  nclust = 4,       
   nsf = 4,               # sex/forest type combinations
-  nbasis = ncol(basis)
+  nbasis = ncol(basis),
+  
+  # constant indices
+  s_f = fates$sex_forest
   
 )
 
 # data
 fates.1 <- list(
-  
-  # indices
-  cluster = fates$cluster,
-  site = fates$site,
   
   # responses, split by scenario
   y_mort_1 = fates$y.mort.scen1,
@@ -74,7 +72,6 @@ fates.1 <- list(
   
   # covariates
   bci_1 = (fates$BCI.1 - mean(fates$BCI.1)) / sd(fates$BCI.1),   # standardized (center + scale)
-  s_f = fates$sex_forest,
   post1 = fates$post1,
   post2 = fates$post2,
   ret = fates$ret,
@@ -167,9 +164,6 @@ model.code.1 <- nimbleCode({
   lambda_raw_sigma ~ dexp(rate = 2)       # to help this sample, let's decrease this
   
   # coefficients (Cauchy priors)
-  # extrinsic
-  #b_study_week ~ dt(0, sigma = 2.5, df = 1)   $ we won't use for now
-  
   # intrinsic 
   b_bci ~ dt(0, sigma = 2.5, df = 1)
   
@@ -189,12 +183,12 @@ model.code.1 <- nimbleCode({
   # non-centered random spline parameters (sex / forest type)
   for (y in 1:nsf) {
     
-    # cluster-specific intercepts
+    # sex/forest type-specific intercepts
     a0_z[y] ~ dnorm(0, sd = 1)
     
     a0[y] <- a0_mean + a0_sigma * a0_z[y]
     
-    # cluster-specific smoothing penalty parameter (lambda)
+    # sex/forest type-specific smoothing penalty parameter (lambda)
     lambda_raw_z[y] ~ dnorm(0, sd = 1)
     
     lambda[y] <- exp(lambda_raw_mean + lambda_raw_sigma * lambda_raw_z[y])
@@ -263,11 +257,15 @@ model.code.1 <- nimbleCode({
 #_______________________________________________________________________________________________
 
 # base model, with code, constants, data, and inits
-model.1 <- nimbleModel(code = model.code.1,
-                       constants = constants,
-                       data = fates.1,
-                       inits = inits,
-                       buildDerivs = TRUE) # required for HMC
+model.1 <- nimbleModel(
+  
+  code = model.code.1,
+  constants = constants,
+  data = fates.1,
+  inits = inits,
+  buildDerivs = TRUE  # required for HMC
+  
+  ) 
 
 # build HMC algorithm (include parameters to monitor)
 model.hmc.1 <- buildHMC(model.1, monitors = params)
@@ -285,27 +283,18 @@ model.hmc.comp.1 <- compileNimble(model.hmc.1, project = model.1)
 model.fit.1 <- runMCMC(
   
   mcmc = model.hmc.comp.1,          
-  nchains = 3,                     # 3 chains should be fine (2 for test)
-  nburnin = 1000,                  # probably doesn't need this many
-  niter = 6000,                    # should be more than enough with >1 chains
-  thin = 1,
+  nchains = 3,                     
+  nburnin = 7000,                   # 3000 total posterior samples
+  niter = 8000, 
   samplesAsCodaMCMC = TRUE
   
   )
-
-# examine summary quickly
-summary(model.fit.1)
-
-gelman.diag(model.fit.1)
 
 #_______________________________________________________________________________________________
 # 5d. Save model output  ----
 #_______________________________________________________________________________________________
 
-# bind together and coerce to df
-model.fit.1.df <- as.data.frame(do.call(rbind, model.fit.1))
-
-write.csv(model.fit.1.df, "Model outputs/model_1.csv")
+saveRDS(model.fit.1, "Model outputs/model_1.rds")
 
 #_______________________________________________________________________________________________
 # 6. Model 2 (All morts, Scenario 2) ----
@@ -330,9 +319,6 @@ model.code.2 <- nimbleCode({
   lambda_raw_sigma ~ dexp(rate = 2)       # to help this sample, let's decrease this
   
   # coefficients (Cauchy priors)
-  # extrinsic
-  #b_study_week ~ dt(0, sigma = 2.5, df = 1)   $ we won't use for now
-  
   # intrinsic 
   b_bci ~ dt(0, sigma = 2.5, df = 1)
   
@@ -426,11 +412,15 @@ model.code.2 <- nimbleCode({
 #_______________________________________________________________________________________________
 
 # base model, with code, constants, data, and inits
-model.2 <- nimbleModel(code = model.code.2,
-                       constants = constants,
-                       data = fates.1,
-                       inits = inits,
-                       buildDerivs = TRUE) # required for HMC
+model.2 <- nimbleModel(
+  
+  code = model.code.2,
+  constants = constants,
+  data = fates.1,
+  inits = inits,
+  buildDerivs = TRUE
+  
+  ) 
 
 # build HMC algorithm (include parameters to monitor)
 model.hmc.2 <- buildHMC(model.2, monitors = params)
@@ -448,27 +438,18 @@ model.hmc.comp.2 <- compileNimble(model.hmc.2, project = model.2)
 model.fit.2 <- runMCMC(
   
   mcmc = model.hmc.comp.2,          
-  nchains = 3,                     # 3 chains should be fine (2 for test)
-  nburnin = 1000,                  # probably doesn't need this many
-  niter = 6000,                    # should be more than enough with >1 chains
-  thin = 1,
+  nchains = 3,                     
+  nburnin = 7000,                  
+  niter = 8000,  
   samplesAsCodaMCMC = TRUE
   
 )
-
-# examine summary quickly
-summary(model.fit.2)
-
-gelman.diag(model.fit.2)
 
 #_______________________________________________________________________________________________
 # 6d. Save model output  ----
 #_______________________________________________________________________________________________
 
-# bind together and coerce to df
-model.fit.2.df <- as.data.frame(do.call(rbind, model.fit.2))
-
-write.csv(model.fit.2.df, "Model outputs/model_2.csv")
+saveRDS(model.fit.2, "Model outputs/model_2.rds")
 
 #_______________________________________________________________________________________________
 # 7. Model 3 (All morts, Scenario 3) ----
@@ -493,9 +474,6 @@ model.code.3 <- nimbleCode({
   lambda_raw_sigma ~ dexp(rate = 2)       # to help this sample, let's decrease this
   
   # coefficients (Cauchy priors)
-  # extrinsic
-  #b_study_week ~ dt(0, sigma = 2.5, df = 1)   $ we won't use for now
-  
   # intrinsic 
   b_bci ~ dt(0, sigma = 2.5, df = 1)
   
@@ -589,11 +567,15 @@ model.code.3 <- nimbleCode({
 #_______________________________________________________________________________________________
 
 # base model, with code, constants, data, and inits
-model.3 <- nimbleModel(code = model.code.3,
-                       constants = constants,
-                       data = fates.1,
-                       inits = inits,
-                       buildDerivs = TRUE) # required for HMC
+model.3 <- nimbleModel(
+  
+  code = model.code.3,
+  constants = constants,
+  data = fates.1,
+  inits = inits,
+  buildDerivs = TRUE
+  
+  )
 
 # build HMC algorithm (include parameters to monitor)
 model.hmc.3 <- buildHMC(model.3, monitors = params)
@@ -611,25 +593,15 @@ model.hmc.comp.3 <- compileNimble(model.hmc.3, project = model.3)
 model.fit.3 <- runMCMC(
   
   mcmc = model.hmc.comp.3,          
-  nchains = 3,                     # 3 chains should be fine (2 for test)
-  nburnin = 1000,                  # probably doesn't need this many
-  niter = 6000,                    # should be more than enough with >1 chains
-  thin = 1,
+  nchains = 3,                     
+  nburnin = 7000,                 
+  niter = 8000,          
   samplesAsCodaMCMC = TRUE
   
 )
-
-# examine summary quickly
-summary(model.fit.3)
-
-gelman.diag(model.fit.3)
 
 #_______________________________________________________________________________________________
 # 7d. Save model output  ----
 #_______________________________________________________________________________________________
 
-# bind together and coerce to df
-model.fit.3.df <- as.data.frame(do.call(rbind, model.fit.3))
-
-write.csv(model.fit.3.df, "Model outputs/model_3.csv")
-
+saveRDS(model.fit.3, "Model outputs/model_3.rds")
