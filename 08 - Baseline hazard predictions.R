@@ -1,11 +1,11 @@
 # Project: WSU Snowshoe Hare and PCT Project
 # Subproject: Survival and hazard modeling
-# Script: 07 - Baseline hazard predictions
+# Script: 08 - Baseline hazard predictions
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 16 Dec 2025 
-# Date last modified: 16 Dec 2025 
+# Date last modified: 23 Jan 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -16,16 +16,21 @@ library(tidyverse)       # manipulate and clean data
 library(mgcv)
 
 #_______________________________________________________________________________________________
-# 2. Read in data ----
+# 2. Read in and clear data ----
 #_______________________________________________________________________________________________
 
 # model samples
-model.fit.1 <- read.csv("Model outputs/model_1.csv")
-model.fit.2 <- read.csv("Model outputs/model_2.csv")
-model.fit.3 <- read.csv("Model outputs/model_3.csv")
+model.fit.1 <- readRDS("Model outputs/model_1.rds")
+model.fit.2 <- readRDS("Model outputs/model_2.rds")
+model.fit.3 <- readRDS("Model outputs/model_3.rds")
 
 # dataset
 fates <- read.csv("Cleaned data/fates_forModel.csv")
+
+# convert to data.frame
+model.fit.1 <- as.data.frame(do.call(rbind, model.fit.1))
+model.fit.2 <- as.data.frame(do.call(rbind, model.fit.2))
+model.fit.3 <- as.data.frame(do.call(rbind, model.fit.3))
 
 #_______________________________________________________________________________________________
 # 3. Define spline ----
@@ -64,8 +69,8 @@ haz_spline <- function (
   # keep only columns we need
   x.1 <- x %>%
     
-    dplyr::select(c("a0.1.":"a0.4.",
-                    "w.1..1.":"w.4..9."))
+    dplyr::select(c("a0[1]":"a0[4]",
+                    "w[1, 1]":"w[4, 9]"))
   
   # calculate predictions for each sex-forest type group
   # internal function to calculate predictions
@@ -77,15 +82,15 @@ haz_spline <- function (
                           ncol = nrow(basis.pred))
     
     # convert coefficients to column vector for multiplication
-    w <- matrix(data = c(y[[paste0("w", ".", group, "..1.")]],
-                         y[[paste0("w", ".", group, "..2.")]],
-                         y[[paste0("w", ".", group, "..3.")]],
-                         y[[paste0("w", ".", group, "..4.")]],
-                         y[[paste0("w", ".", group, "..5.")]],
-                         y[[paste0("w", ".", group, "..6.")]],
-                         y[[paste0("w", ".", group, "..7.")]],
-                         y[[paste0("w", ".", group, "..8.")]],
-                         y[[paste0("w", ".", group, "..9.")]]),
+    w <- matrix(data = c(y[[paste0("w[", group, ", 1]")]],
+                         y[[paste0("w[", group, ", 2]")]],
+                         y[[paste0("w[", group, ", 3]")]],
+                         y[[paste0("w[", group, ", 4]")]],
+                         y[[paste0("w[", group, ", 5]")]],
+                         y[[paste0("w[", group, ", 6]")]],
+                         y[[paste0("w[", group, ", 7]")]],
+                         y[[paste0("w[", group, ", 8]")]],
+                         y[[paste0("w[", group, ", 9]")]]),
            ncol = 9)
 
     
@@ -96,7 +101,7 @@ haz_spline <- function (
     w.by.b.sum <- apply(w.by.b, 1, sum) 
     
     # add to the intercept (a0) and exponentiate to transform to hazard rate scale
-    spline.pred <- exp(as.numeric(y[paste0("a0.", group, ".")]) + w.by.b.sum) 
+    spline.pred <- exp(as.numeric(y[paste0("a0[", group, "]")]) + w.by.b.sum) 
     
     # and add into the array
     return(spline.pred)
