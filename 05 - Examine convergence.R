@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 22 Jan 2026 
 # Date completed: 22 Jan 2026 
-# Date last modified: 22 Jan 2026 
+# Date last modified: 26 Jan 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -51,3 +51,11 @@ MCMCtrace(model.2, params = c(param.names[c(7:12)]), pdf = F)
 
 # model 3
 MCMCtrace(model.3, params = c(param.names[c(7:12)]), pdf = F)
+
+#_______________________________________________________________________________________________
+# 5. Save Rhat and ESS for hazard ratios ----
+#_______________________________________________________________________________________________
+
+write.table(MCMCsummary(model.1, params = c(param.names[c(7:12)])), "clipboard", sep = "\t")
+write.table(MCMCsummary(model.2, params = c(param.names[c(7:12)])), "clipboard", sep = "\t")
+write.table(MCMCsummary(model.3, params = c(param.names[c(7:12)])), "clipboard", sep = "\t")
