@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 23 Jan 2026 
+# Date last modified: 26 Jan 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -213,11 +213,12 @@ e_sim_morts <- function (x) {
                   haz.1, haz.2, haz.3) %>%
     
     # take Poisson draws using each hazard
+    # must take the correct number of draws so our discrepancy doesn't explode!
     mutate(
       
-      pois.draw.1 = rpois(1, haz.1),
-      pois.draw.2 = rpois(1, haz.2),
-      pois.draw.3 = rpois(1, haz.3)
+      pois.draw.1 = ifelse(rpois(n(), haz.1) > 0, 1, 0),
+      pois.draw.2 = ifelse(rpois(n(), haz.2) > 0, 1, 0),
+      pois.draw.3 = ifelse(rpois(n(), haz.3) > 0, 1, 0)
       
     ) %>%
     
@@ -352,63 +353,20 @@ for (i in 1:3000) {
     write.csv(discrep.all.i, "discrep_all_i.csv")
     
   }
-    
+  
 }
 
-# 01-23-2026
-# cleaned up a lot of code. Now to run it on the lab pc
-
-
-
-
+# completed 01-25-2026
+discrep.all.i <- read.csv("PPCs/discrep_all_i.csv")
 
 #_______________________________________________________________________________________________
-# 6. Calculate Bayes p-value ----
+# 6. Calculate Bayesian p-values ----
 #_______________________________________________________________________________________________
 
-bayes.diff$diff = bayes.diff$sim - bayes.diff$obs
+(bayes.p <- discrep.all.i %>%
+  
+  summarize(scen1 = sum(Dsim.Dobs.1) / n(),
+            scen2 = sum(Dsim.Dobs.2) / n(),
+            scen3 = sum(Dsim.Dobs.3) / n())
 
-length(which(bayes.diff$diff > 0)) / nrow(bayes.diff) # 0.12
-
-#_______________________________________________________________________________________________
-# 7. Plot ----
-#_______________________________________________________________________________________________
-
-# distribution
-ggplot(data = bayes.diff,
-       aes(x = diff)) +
-  
-  theme_bw() +
-  
-  geom_density(fill = "gray",
-               alpha = 0.25) +
-  
-  geom_vline(xintercept = 0,
-             linetype = "dashed") +
-  
-  theme(panel.grid = element_blank(),
-        axis.title.y = element_blank(),
-        axis.text.x = element_text(color = "black")) +
-  
-  xlab("Dsim - Dobs")
-
-# 1:1 plot
-ggplot(data = bayes.diff,
-       aes(x = obs,
-           y = sim)) +
-  
-  theme_bw() +
-  
-  geom_point(shape = 21) +
-  
-  geom_abline(intercept = 0,
-              slope = 1,
-              linetype = "dashed") +
-  
-  xlab("Observed discrepancy") +
-  ylab("Simulated discrepancy") +
-  
-  coord_cartesian(xlim = c(100, 250),
-                  ylim = c(100, 250))
-
-# slightly better
+)
