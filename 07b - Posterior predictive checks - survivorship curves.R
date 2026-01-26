@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 15 Dec 2025 
+# Date last modified: 26 Jan 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -30,9 +30,9 @@ library(tictoc)          # timing
 #_______________________________________________________________________________________________
 
 # model samples
-model.fit.1 <- read.csv("Model outputs/model_1.csv")
-model.fit.2 <- read.csv("Model outputs/model_2.csv")
-model.fit.3 <- read.csv("Model outputs/model_3.csv")
+model.fit.1 <- readRDS("Model outputs/model_1.rds")
+model.fit.2 <- readRDS("Model outputs/model_2.rds")
+model.fit.3 <- readRDS("Model outputs/model_3.rds")
 
 # dataset
 fates <- read.csv("Cleaned data/fates_forModel.csv")
@@ -46,7 +46,15 @@ day.lookup <- read.csv("Cleaned data/day_lookup.csv")
 #_______________________________________________________________________________________________
 # 3. Prepare data ----
 #_______________________________________________________________________________________________
-# 3a. Attribute study-week to fates df ----
+# 3a. Convert mcmc.lists to dfs ----
+#_______________________________________________________________________________________________
+
+model.fit.1 <- as.data.frame(do.call(rbind, model.fit.1))
+model.fit.2 <- as.data.frame(do.call(rbind, model.fit.2))
+model.fit.3 <- as.data.frame(do.call(rbind, model.fit.3))
+
+#_______________________________________________________________________________________________
+# 3b. Attribute study-week to fates df ----
 #_______________________________________________________________________________________________
 
 fates.1 <- fates %>%
@@ -80,7 +88,7 @@ fates.1 <- fates %>%
          study.week.s = (study.week - mean(study.week)) / sd(study.week))
 
 #_______________________________________________________________________________________________
-# 3b. Spline for prediction ----
+# 3c. Spline for prediction ----
 #_______________________________________________________________________________________________
 
 # define knots (quantile)
@@ -256,7 +264,7 @@ ggplot() +
 
 # Here we'll loop through each iteration (take a subsample first),
 # loop through each deployment (n = 383),
-# applying a calc intensity function on an 86-week dataset,
+# applying a calc intensity function on an 150-week dataset,
 # take a Poisson draw and truncate the dataset after the first event
 # then apply the K-M curve function
 
@@ -266,203 +274,377 @@ ggplot() +
 # 6a. Helper functions ----
 #_______________________________________________________________________________________________
 
-# calculate Poisson intensity function
-calc_intensity_2 <- function (
+# expand dataset for max.t weeks
+expand_time <- function (x, max.t = 150) {
+  
+  # x is an individual deployment
+  # keep only one row
+  x.1 <- x %>%
     
-  y,    # covariates
-  v     # coefficients
+    dplyr::select(deployment.1, site, sex_forest, BCI.s, study.week) %>%
+    
+    slice(1) %>%
+    
+    # named Site
+    mutate(
+      
+      Site = case_when(
+        
+        site == 1 ~ "1A",
+        site == 2 ~ "1B",
+        site == 3 ~ "1C",
+        site == 4 ~ "2A",
+        site == 5 ~ "2B",
+        site == 6 ~ "2C",
+        site == 7 ~ "3A",
+        site == 8 ~ "3B",
+        site == 9 ~ "3C",
+        site == 10 ~ "4A",
+        site == 11 ~ "4B",
+        site == 12 ~ "4C"
+        
+      )
+      
+    )
   
-  ) {
+  # correct study.week (max is 160)
+  # we should replace anything above 160 with 160
+  t = 1:max.t
   
-  # BLH spline prediction
-  # weights w
-  w <- t(as.matrix(as.numeric(c(v[paste0("w", ".", y$sex_forest[1], "..1.")],
-                                v[paste0("w", ".", y$sex_forest[1], "..2.")],
-                                v[paste0("w", ".", y$sex_forest[1], "..3.")],
-                                v[paste0("w", ".", y$sex_forest[1], "..4.")],
-                                v[paste0("w", ".", y$sex_forest[1], "..5.")],
-                                v[paste0("w", ".", y$sex_forest[1], "..6.")],
-                                v[paste0("w", ".", y$sex_forest[1], "..7.")],
-                                v[paste0("w", ".", y$sex_forest[1], "..8.")],
-                                v[paste0("w", ".", y$sex_forest[1], "..9.")]))))
+  # actual study.week
+  study.week.real = seq(x.1$study.week, x.1$study.week + (160 - x.1$study.week))
   
-  # multiply and sum to create "normal" scale spline prediction
-  w.by.b.sum <- apply(sweep(basis.pred, 2, w, `*`), 1, sum)
+  # add concat the max to fill in the rest of the max.t
+  # only if necessary
+  if (max.t - length(study.week.real) > 0) {
+    
+    study.week <- c(study.week.real, rep(160, times = max.t - length(study.week.real)))
+    
+  } else {
+    
+    # truncate if needed
+    study.week <- study.week.real[1:150]
+    
+  }
   
-  # add to intercept and exponentiate
-  blh = as.numeric(exp(v[paste0("a0.", y$sex_forest, ".")] + w.by.b.sum[y$week]))
+  # and standardize
+  study.week.s <- (study.week - mean(fates.2$study.week)) / sd(fates.2$study.week)
   
-  # coefficient prediction (must be on the log scale!)
-  coef.pred = exp(log(v$hr_bci) * y$BCI.s +
-                  log(v$hr_bci_study_week) * y$study.week.s * y$BCI.s +
-                  log(v$hr_pil_total1) * y$post1 * y$pil +
-                  log(v$hr_pil_total2) * y$post2 * y$pil +
-                  log(v$hr_ret_total1) * y$post1 * y$ret +
-                  log(v$hr_ret_total2) * y$post2 * y$ret)
+  # year.week for starting study.week (take only the first one)
+  year.week.start <- day.lookup$year.week[day.lookup$study.week == study.week[1]][1]
   
-  # total intensity
-  intens = blh * coef.pred
+  # all correct year.weeks
+  # this is probably stupid code
+  week <- c(seq(year.week.start, 52),
+            rep(1:52, times = 5))
   
-  # Poisson draw
-  pois.draw = rpois(n = 1, intens)
+  # keep only the first max.t  
+  week <- week[1:max.t]
   
-  # pack into a df
-  y.intens.pois <- data.frame(intens = intens,
-                              pois.draw = rpois(length(intens), intens))
-  
-  return(y.intens.pois)
-  
-}
-
-# function to simulate lifetimes
-sim_lifetime_byDeploy <- function (z) {
-  
-  # create new data.frame to fill
+  # bind into df
   suppressMessages(
     
-    deploy.df <- data.frame(
+    x.df <- data.frame(
       
-      deployment.1 = z$deployment.1[1],
-      sex_forest = z$sex_forest[1],
-      t = 1:200,
-      study.week = seq(z$study.week[1], z$study.week[1] + 19),
-      post1 = z$post1[1],
-      post2 = z$post2[1],
-      ret = z$ret[1],
-      pil = z$pil[1],
-      BCI.s = z$BCI.s[1]
+      deploy = x.1$deployment.1,
+      Site = x.1$Site,
+      sex_forest = x.1$sex_forest,
+      BCI.s = x.1$BCI.s,
+      study.week = study.week,
+      study.week.s = study.week.s,
+      week = week,
+      t = t
       
     ) %>%
       
+      # and add treatment variables
       mutate(
         
-        # subtract 160 (max week) from anything above it in study.week to recycle
-        study.week = ifelse(study.week > 160,
-                            (study.week - 160) + 4,    # so the correct week of the year will be attributed
-                            study.week)
-        
-      ) %>%
-      
-      mutate(
-        
-        # standardize study.week
-        study.week.s = (study.week - mean(fates.1$study.week)) / sd(fates.1$study.week)
-        
-      ) %>%
-      
-      # attribute correct week of the year
-      left_join(
-        
-        day.lookup %>%
+        # post 1
+        post1 = case_when(
           
-          dplyr::select(study.year.week,
-                        study.week) %>%
+          # 2 and 3
+          # pre-treatment
+          Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+            study.week < 53 ~ 0,
           
-          rename(week = study.year.week) %>%
+          # post-treatment 1
+          Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+            study.week >= 53 &
+            study.week <= 105 ~ 1,
           
-          group_by(study.week) %>%
+          # post-treatment 2
+          Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+            study.week > 105 ~ 0,
           
-          slice(1)
+          # 1 and 4
+          # pre-treatment
+          Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+            study.week <= 53 ~ 0,
+          
+          # post-treatment 1
+          Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+            study.week >= 54 &
+            study.week <= 106 ~ 1,
+          
+          # post-treatment 2
+          Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+            study.week > 106 ~ 0
+          
+        ),
+        
+        post2 = case_when(
+          
+          # 2 and 3
+          # pre-treatment
+          Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+            study.week < 53 ~ 0,
+          
+          # post-treatment 1
+          Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+            study.week >= 53 &
+            study.week <= 105 ~ 0,
+          
+          # post-treatment 2
+          Site %in% c("2A", "2B", "2C", "3A", "3B", "3C") &
+            study.week > 105 ~ 1,
+          
+          # 1 and 4
+          # pre-treatment
+          Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+            study.week <= 53 ~ 0,
+          
+          # post-treatment 1
+          Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+            study.week >= 54 &
+            study.week <= 106 ~ 0,
+          
+          # post-treatment 2
+          Site %in% c("1A", "1B", "1C", "4A", "4B", "4C") &
+            study.week > 106 ~ 1
+          
+        ),
+        
+        # assign treatments
+        ret = case_when(Site %in% c("1C", "2C", "3C", "4C") ~ 0,
+                        Site %in% c("1A", "2B", "3B", "4A") ~ 1,
+                        Site %in% c("1B", "2A", "3A", "4B") ~ 0),
+        
+        pil = case_when(Site %in% c("1C", "2C", "3C", "4C") ~ 0,
+                        Site %in% c("1A", "2B", "3B", "4A") ~ 0,
+                        Site %in% c("1B", "2A", "3A", "4B") ~ 1)
         
       )
     
   )
   
-  # calculate intensity and bind
-  deploy.df <- cbind(deploy.df, calc_intensity_2(y = deploy.df,
-                                                 v = iter.draw))
+  # return
+  return(x.df)
   
-  # extract lifetime
-  focal.lifetime <- data.frame(
+}
+
+# 1. calculate complete hazard
+# 2. simulate draws
+# 3. truncate at the first > 0
+sim_lifetime <- function (x) {
+  
+  # x is each individual deployment
+  
+  # 1. calculate complete hazard
+  calc_spline_pred <- function (x, y) {
     
-    iter = i,
-    deployment = z$deployment.1[1],
-    lifetime = ifelse(
+    # y is the focal iteration
+    # extract spline weights w
+    w <- t(as.matrix(as.numeric(c(y[paste0("w", "[", x$sex_forest[1], ", 1]")],
+                                  y[paste0("w", "[", x$sex_forest[1], ", 2]")],
+                                  y[paste0("w", "[", x$sex_forest[1], ", 3]")],
+                                  y[paste0("w", "[", x$sex_forest[1], ", 4]")],
+                                  y[paste0("w", "[", x$sex_forest[1], ", 5]")],
+                                  y[paste0("w", "[", x$sex_forest[1], ", 6]")],
+                                  y[paste0("w", "[", x$sex_forest[1], ", 7]")],
+                                  y[paste0("w", "[", x$sex_forest[1], ", 8]")],
+                                  y[paste0("w", "[", x$sex_forest[1], ", 9]")]))))
+    
+    # multiply and sum to create "normal" scale spline prediction
+    w.by.b.sum <- apply(sweep(basis.pred, 2, w, `*`), 1, sum)
+    
+    # add to intercept and exponentiate
+    blh = as.numeric(exp(y[paste0("a0[", x$sex_forest, "]")] + w.by.b.sum[x$week]))
+    
+    # total hazard ratio prediction
+    hr = exp(log(y$hr_bci) * x$BCI.s +
+               log(y$hr_bci_study_week) * x$study.week.s * x$BCI.s +
+               log(y$hr_pil_total1) * x$post1 * x$pil +
+               log(y$hr_pil_total2) * x$post2 * x$pil +
+               log(y$hr_ret_total1) * x$post1 * x$ret +
+               log(y$hr_ret_total2) * x$post2 * x$ret)
+    
+    # full hazard
+    full.haz = blh * hr.pred
+    
+    # return
+    return(full.haz)
+    
+  }
+  
+  # add to x
+  x$haz.1 <- calc_spline_pred(x, iter.draw1)
+  x$haz.2 <- calc_spline_pred(x, iter.draw2)
+  x$haz.3 <- calc_spline_pred(x, iter.draw3)
+  
+  # 2. simulate draws
+  draw_pois <- function (x) {
+    
+    x.1 <- x %>%
       
-      1 %in% deploy.df$pois.draw,
-      which(deploy.df$pois.draw > 0)[1],
-      200                                 # we'll probably truncate this dataset
-      # since the max weeks we monitored a hare was 86
+      mutate(
+        
+        draw.1 = rpois(n(), haz.1),
+        draw.2 = rpois(n(), haz.2),
+        draw.3 = rpois(n(), haz.3)
+        
+      )
+    
+    return(x.1)
+    
+  }
+  
+  x.draws <- draw_pois(x)
+  
+  # 3. truncate at first event, extract lifetime
+  x.2 <- data.frame(
+    
+    deploy = x.draws$deploy[1],
+    
+    lifetime1 = ifelse(
+      
+      sum(x.draws$draw.1) > 0,
+      which(x.draws$draw.1 > 0)[1],
+      max(x.draws$t)
+      
+    ),
+    
+    lifetime2 = ifelse(
+      
+      sum(x.draws$draw.2) > 0,
+      which(x.draws$draw.2 > 0)[1],
+      max(x.draws$t)
+      
+    ),
+    
+    lifetime3 = ifelse(
+      
+      sum(x.draws$draw.3) > 0,
+      which(x.draws$draw.3 > 0)[1],
+      max(x.draws$t)
+      
     )
     
   )
   
+  return(x.2)
+  
+}
+
+# calculate Kaplan-Meier curve from lifetimes
+kap_mei_lifetime <- function (x) {
+  
+  # x is the data.frame of lifetimes
+  
+  # function that takes each scenario's lifetimes and determines who's alive at each point
+  lifetime_to_survivorship <- function (y) {
+    
+    prop.alive <- vector(length = 150)
+    
+    for (i in 1:150) {
+      
+      prop.alive[i] <- sum(y >= i) / length(y)
+      
+    }
+    
+    return(prop.alive)
+    
+  }
+  
+  # data.frame to hold it all
+  survivorship.all <- data.frame(
+    
+    t = rep(1:150, times = 3),
+    
+    S = c(lifetime_to_survivorship(x$lifetime1),
+          lifetime_to_survivorship(x$lifetime2),
+          lifetime_to_survivorship(x$lifetime3)),
+    
+    scen = rep(c(1:3), each = 150)
+    
+  )
+  
   # return
-  return(focal.lifetime)
+  return(survivorship.all)
   
 }
 
 #_______________________________________________________________________________________________
-# 6b. Loop by iteration ----
+# 6b. Loop ----
 
 # split deployments
 deploy.split <- split(fates.2, fates.2$deployment.1)
-
-draws = model.fit.1
 
 #_______________________________________________________________________________________________
 
 # loop through draws
 all.km.curves <- data.frame()
 
-for (i in 1:nrow(draws)) {
+for (i in 1:nrow(model.fit.1)) {
   
-  iter.draw = draws[i, ]
+  tictoc::tic()
   
-  # apply function to each deployment
-  all.iter.lifetimes <- do.call(rbind, lapply(deploy.split, 
-                                              sim_lifetime_byDeploy))
+  # extract focal iteration
+  iter.draw1 <- model.fit.1[i, ]
+  iter.draw2 <- model.fit.2[i, ]
+  iter.draw3 <- model.fit.3[i, ]
   
+  # 1. expand deployment dfs - expand_time
+  expanded.deploys <- lapply(deploy.split, expand_time, max.t = 150)
   
-  # calculate K-M curve
-  # create dataset
+  # 2. calculate hazard at each week
+  # 3. take Poisson draws for each week
+  # 4. truncate at the first > 0
+  lifetimes <- lapply(expanded.deploys, sim_lifetime)
   
-  # blank df
-  km.data <- data.frame()
+  # bind lifetimes together
+  lifetimes.df <- do.call(rbind, lifetimes)
   
-  # loop
-  for (j in 1:nrow(all.iter.lifetimes)) {
+  # calculate survivorship
+  S.df <- kap_mei_lifetime(lifetimes.df)
+  
+  # add iter column
+  S.df$iter <- i
+  
+  tictoc::toc()
+  
+  # print status and save to .csv every 50 iterations
+  if (i %% 50 == 0) {
     
-    # vector of zero observations + 1
-    zero.vector <- vector(length = all.iter.lifetimes$lifetime[all.iter.lifetimes$deployment == j] - 1)
-    zero.vector[1:length(zero.vector)] <- 0
-    zero.vector[length(zero.vector) + 1] <- 1
+    print(paste0("Completed iteration ", i, " of 3000"))
     
-    # pack into df
-    focal.df <- data.frame(
-      
-      j = j,
-      t = 1:length(zero.vector),
-      event = zero.vector
-      
-    )
-    
-    km.data <- rbind(km.data, focal.df)
-    
-  }
-  
-  # truncate data at 100 weeks
-  km.data.1 <- km.data %>% filter(t < 101)
-  
-  # apply KM function
-  km.curve.data <- kap_mei(x = km.data.1,
-                           response = "event")
-  
-  # add in iteration
-  km.curve.data$iter = i
-  
-  # pack into df
-  all.km.curves <- rbind(all.km.curves, km.curve.data)
-  
-  # print status (every 100 iterations)
-  
-  if (i %% 100 == 0) {
-    
-    print(paste0("Completed iteration ", i, " of ", nrow(draws))) 
+    write.csv(S.df, "S_all_i")
     
   }
   
 }
+
+# ~ 13 s per iteration
+# 10 h
+(13 * 3000) / 3600
+
+# 01-26-2026
+# will run overnight
+
+
+
+
+
 
 #_______________________________________________________________________________________________
 # 8. Final survivorship curves for PPC
