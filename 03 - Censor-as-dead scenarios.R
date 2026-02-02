@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 12 Nov 2025 
 # Date completed: 12 Nov 2025 
-# Date last modified: 19 Nov 2025 
+# Date last modified: 02 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -138,7 +138,7 @@ model.pred <- nimbleModel(code = model.code,
 model.fit <- nimbleMCMC(model = model.pred,
                         monitors = params,
                         nchains = 3,
-                        nburnin = 5000,
+                        nburnin = 10000,
                         niter = 20000,
                         thin = 1,
                         samplesAsCodaMCMC = TRUE)
@@ -345,6 +345,9 @@ fates.new.3 <- fates.new.2 %>%
     Collar.type.1,
     BCI.1,
     BCI.2,
+    p.dm,
+    p.open,
+    moon,
     post1,
     post2,
     ret,
