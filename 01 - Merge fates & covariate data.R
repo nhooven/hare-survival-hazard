@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2023
 # Date completed: 27 Nov 2023
-# Date last modified: 02 Feb 2026 
+# Date last modified: 03 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -15,7 +15,6 @@
 library(tidyverse)       # manipulate and clean data
 library(lubridate)       # work with dates
 library(survival)        # survsplit function
-library(suncalc)         # moon illumination
 
 #_______________________________________________________________________________________________
 # 2. Read in fates data ----
@@ -279,192 +278,11 @@ day.lookup$study.year.week <- study.year.week.id[1:(length(study.year.week.id) -
                                                    (length(study.year.week.id) - nrow(day.lookup)))]
 
 
-
-#_______________________________________________________________________________________________
-# 6c. Snow on and moon illumination variables ----
-
-# snow on will be a binary indicator by FT
-# moon illumination is the proportion illuminated
-# moon horizon is proportion of the night the moon is above the horizon
-  # Gigliotti and Diefenbach 2018
-
-#_______________________________________________________________________________________________
-
-# snow-on / snow-off
-# off - SFL
-snow.off.days.sfl <- c(
-  
-  1:36,           # fall 2022
-  211:389,        # summer 2023
-  571:761,        # summer 2024
-  942:1118        # summer 2025
-  )
-
-# off - XMC
-snow.off.days.xmc <- c(
-  
-  1:36,           # fall 2022
-  211:389,        # summer 2023
-  560:763,        # summer 2024
-  930:1118        # summer 2025
-)
-
-# on - SFL
-snow.on.days.sfl <- c(
-  
-  37:210,           # 2022 / 2023
-  390:570,        # 2023 / 2024
-  762:941        # 2024 / 2025
-)
-
-# on - XMC
-snow.on.days.xmc <- c(
-  
-  37:210,           
-  390:559,        
-  764:929        
-)
-
-# add to day.lookup
-day.lookup <- day.lookup %>%
-  
-  mutate(
-    
-    snow.on.sfl = ifelse(study.day %in% snow.on.days.sfl, 1, 0),
-    snow.on.xmc = ifelse(study.day %in% snow.on.days.xmc, 1, 0)
-    
-  )
-
-# moon illumination
-moon.illum <- getMoonIllumination(date = force_tz(day.lookup$study.date,
-                                                  "America/Los_Angeles"), 
-                                  keep = "fraction")
-
-# moon times (generic lat long centered on Loomis)
-lsf.latlong <- c(48.819758, -119.781768)
-
-# we want to keep moon data from 1 day earlier, and 1 day later
-moon.times <- getMoonTimes(date = c(min(day.lookup$study.date - days(1)),
-                                    day.lookup$study.date,
-                                    max(day.lookup$study.date) + days(1)),
-                           lat = lsf.latlong[1],
-                           lon = lsf.latlong[2],
-                           keep = c("rise", "set"),
-                           tz = "America/Los_Angeles") %>%
-  
-  dplyr::select(rise, set)
-
-# calculate percent of night above horizon
-# first, we need to determine what was night
-night.times <- getSunlightTimes(date = c(min(day.lookup$study.date - days(1)),
-                                         day.lookup$study.date,
-                                         max(day.lookup$study.date) + days(1)), 
-                                lat = lsf.latlong[1],
-                                lon = lsf.latlong[2],
-                                keep = c("dusk", "dawn"),
-                                tz = "America/Los_Angeles")
-
-
-# drop NAs so %within% works okay
-moonrise.noNA <- moon.times$rise[which(is.na(moon.times$rise) == F)]
-moonset.noNA <- moon.times$set[which(is.na(moon.times$set) == F)]
-  
-# loop through study.date
-moon.horizon.all <- vector()
-
-for (i in 1:nrow(day.lookup)) {
-  
-  focal.prev.date <- day.lookup$study.date[i] - days(1)
-  focal.date <- day.lookup$study.date[i]
-  focal.next.date <- day.lookup$study.date[i] + days(1)
-  
-  # time intervals for focal.prev.date AND focal.date AND focal.next.date
-  focal.prev.date.int <- interval(ymd_hm(paste0(focal.prev.date, " 00:00"), tz = "America/Los_Angeles"),
-                                  ymd_hm(paste0(focal.prev.date, " 23:59"), tz = "America/Los_Angeles"))
-
-  
-  focal.date.int <- interval(ymd_hm(paste0(focal.date, " 00:00"), tz = "America/Los_Angeles"),
-                             ymd_hm(paste0(focal.date, " 23:59"), tz = "America/Los_Angeles"))
-  
-  focal.next.date.int <- interval(ymd_hm(paste0(focal.next.date, " 00:00"), tz = "America/Los_Angeles"),
-                                  ymd_hm(paste0(focal.next.date, " 23:59"), tz = "America/Los_Angeles"))
-  
-  # correct night interval
-  # this must START on focal.date
-  night.start <- night.times$dusk[night.times$dusk %within% focal.date.int]
-  
-  # and END on focal.next.date
-  night.end <- night.times$dawn[night.times$dawn %within% focal.next.date.int]
-  
-  # correct moon interval
-  # notably, the moon can rise and set at any time of day
-  moonrise <- c(moonrise.noNA[moonrise.noNA %within% focal.prev.date.int],
-                moonrise.noNA[moonrise.noNA %within% focal.date.int],
-                moonrise.noNA[moonrise.noNA %within% focal.next.date.int])
-  moonset <- c(moonset.noNA[moonset.noNA %within% focal.prev.date.int],
-               moonset.noNA[moonset.noNA %within% focal.date.int],
-               moonset.noNA[moonset.noNA %within% focal.next.date.int])
-  
-  # choose the correct moonrise
-  if (length(moonrise) > 1) {
-    
-    moonrise.focal <- as.POSIXct(ifelse(moonrise[2] %within% focal.date.int,
-                                        moonrise[2],
-                                        moonrise[1]))
-    
-  } else {
-    
-    moonrise.focal <- moonrise[1]
-    
-  }
-  
-      # and the first moonset that comes after it
-  if (length(which(moonset > moonrise.focal)) > 0) {
-    
-    moonset.focal <- moonset[which(moonset > moonrise.focal)[1]]
-    
-    # use the end of the night - seems like the moon didn't set
-  } else {
-    
-    moonset.focal <- night.end
-    
-  }
-  
-  
-  # create night and moon intervals
-  night.interval <- interval(night.start, night.end)
-  moon.interval <- interval(moonrise.focal, moonset.focal)
-  
-  # subtract
-  # https://odissei-soda.nl/tutorials/lubridate/
-  moon.inside.night.interval <- interval(pmax(int_start(moon.interval), 
-                                              int_start(night.interval)),
-                                         pmin(int_end(moon.interval), 
-                                              int_end(night.interval)))
-  
-  if(int_length(moon.inside.night.interval) <= 0) {
-    
-    moon.horizon <- 0
-    
-  } else {
-    
-    moon.horizon <- int_length(moon.inside.night.interval) / int_length(night.interval)
-    
-  }
-  
-  moon.horizon.all <- c(moon.horizon.all, moon.horizon)
-  
-}
-
-# add to day.lookup
-day.lookup$moon.horizon <- moon.horizon.all
-day.lookup$moon.illum <- moon.illum$fraction
-
 # write to .csv for use later
-write.csv(day.lookup, "Cleaned data/day_lookup.csv")
+write.csv(day.lookup, "Cleaned data/day_lookup.csv", row.names = F)
 
 #_______________________________________________________________________________________________
-# 6d. Create event variable ----
+# 6c. Create event variable ----
 
 # Mortalities and unknown censor events get a 1
 # all other observations get a zero
@@ -485,7 +303,7 @@ fates.3 <- fates.3 %>%
   )
                     
 #_______________________________________________________________________________________________
-# 6e. Split dataset by events ----
+# 6d. Split dataset by events ----
 #_______________________________________________________________________________________________
 
 fates.4 <- survSplit(Surv(start,
@@ -497,7 +315,7 @@ fates.4 <- survSplit(Surv(start,
                      end = "end")
 
 #_______________________________________________________________________________________________
-# 6f. Mortality indicators ----
+# 6e. Mortality indicators ----
 
 # SCENARIO 1 (all unknown censors remain zero) - y.mort.scen1
 # ALL mortality events get a 1
@@ -542,7 +360,7 @@ sum(is.na(fates.4$y.pred.scen1))
 fates.4$y.pred.scen1[is.na(fates.4$y.pred.scen1)] <- 0
 
 #_______________________________________________________________________________________________
-# 6g. Create week variable and keep only columns we need ----
+# 6f. Create week variable and keep only columns we need ----
 #_______________________________________________________________________________________________
 
 # add correct "study.year.week" as a variable
@@ -711,7 +529,7 @@ fates.7 <- fates.6 %>%
 lsm.1 <- lsm %>%
   
   # keep only columns we need
-  dplyr::select(site, p.dm, p.open) %>%
+  dplyr::select(site, p.dm, p.o, p.js) %>%
   
   rename(Site = site) %>%
   
@@ -731,28 +549,8 @@ fates.8 <- fates.7 %>%
   left_join(lsm.1)
 
 #_______________________________________________________________________________________________
-# 10. Moon variable (by week) ----
-
-# we'll merge by study.week
-
-#_______________________________________________________________________________________________
-
-moon.week <- day.lookup %>%
-  
-  group_by(study.week) %>%
-  
-  summarize(moon.illum = mean(moon.illum),
-            moon.horizon = mean(moon.horizon))
-
-fates.9 <- fates.8 %>% left_join(moon.week) %>%
-  
-  mutate(moon = moon.illum * moon.horizon) %>%
-  
-  dplyr::select(-c(moon.illum, moon.horizon))
-
-#_______________________________________________________________________________________________
 # 11. Write to csv ----
 #_______________________________________________________________________________________________
 
-write.csv(fates.9, "Cleaned data/fates_final_cleaned.csv", row.names = F)
+write.csv(fates.8, "Cleaned data/fates_final_cleaned.csv", row.names = F)
 
