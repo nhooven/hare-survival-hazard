@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 12 Nov 2025 
 # Date completed: 12 Nov 2025 
-# Date last modified: 02 Feb 2026 
+# Date last modified: 03 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -13,9 +13,6 @@
 #_______________________________________________________________________________________________
 
 library(tidyverse)       # manipulate and clean data
-library(nimble)          # MCMC
-library(coda)            # play nice with posterior samples
-library(bayestestR)
 
 #_______________________________________________________________________________________________
 # 2. Read in and prepare data ----
@@ -27,7 +24,7 @@ fates <- read.csv("Cleaned data/fates_final_cleaned_2.csv")
 fates.1 <- fates %>% 
   
   filter((Event.type == "Mortality" |
-         (Event.type == "Censor" & General.cause == "Dead transmitter"))) %>%
+            (Event.type == "Censor" & General.cause == "Dead transmitter"))) %>%
   
   group_by(deployment.1) %>%
   
@@ -48,129 +45,34 @@ fates.1 <- fates %>%
 fates.to.pred <- fates %>%
   
   filter(Event.type == "Censor" &
-         General.cause == "Unknown" &
-         event == 1)
+           General.cause == "Unknown" &
+           event == 1)
 
 #_______________________________________________________________________________________________
-# 3. Prepare for modeling ----
+# 3. Logistic regression model ----
 #_______________________________________________________________________________________________
 
-constants = list(
-  
-  N = nrow(fates.1),                   # observations in fates df for modeling
-  N_to_pred = nrow(fates.to.pred)      # observations to predict upon
-  
-)
+glm.model <- glm(y.mort ~ Collar.type.1 + Transmitter.lifetime,
+                 data = fates.1,
+                 family = binomial)
 
-fates.data <- list(
-  
-  # for model fitting
-  collar = fates.1$Collar.type.1,
-  tag_life = fates.1$Transmitter.lifetime,
-  y_mort = fates.1$y.mort,
-  
-  # for prediction
-  collar_to_pred = fates.to.pred$Collar.type.1,
-  tag_life_to_pred = fates.to.pred$Transmitter.lifetime
-  
-)
+summary(glm.model)
 
 #_______________________________________________________________________________________________
-# 4. Set up model ----
-#_______________________________________________________________________________________________
-# 4a. Code ----
+# 4. Predict ----
 #_______________________________________________________________________________________________
 
-model.code <- nimbleCode({
+glm.pred <- predict(glm.model, fates.to.pred, type = "response", se.fit = T)
+
+# data frame
+glm.pred.1 <- data.frame(
   
-  # priors
-  b0 ~ dnorm(0, sd = 1)
-  b1 ~  dt(0, sigma = 2.5, df = 1)        # collar
-  b2 ~  dt(0, sigma = 2.5, df = 1)        # tag life
+  deployment.1 = fates.to.pred$deployment.1,
+  mean = glm.pred$fit,
+  l95 = glm.pred$fit - 1.96 * glm.pred$se.fit,
+  u95 = glm.pred$fit + 1.96 * glm.pred$se.fit
   
-  # likelihood
-  for (i in 1:N) {
-    
-    y_mort[i] ~ dbern(p_mort[i])
-    
-    logit(p_mort[i]) <- b0 + b1 * collar[i] + b2 * tag_life[i]
-    
-  }
-  
-  # prediction
-  for (k in 1:N_to_pred) {
-    
-    p_pred[k] <- ilogit(b0 + b1 * collar_to_pred[k] + b2 * tag_life_to_pred[k])
-    
-  }
-  
-})
-
-# parameters monitored
-params <- c("b0",
-            "b1",
-            "b2",
-            "p_pred")
-
-# inits
-inits <- list(
-  
-  b0 = rnorm(1, 0, 2.5),
-  b1 = rnorm(1, 0, 2.5),
-  b2 = rnorm(1, 0, 2.5)
-  
-)
-
-#_______________________________________________________________________________________________
-# 4b. Model ----
-#_______________________________________________________________________________________________
-
-model.pred <- nimbleModel(code = model.code,
-                          constants = constants,
-                          data = fates.data,
-                          inits = inits) 
-
-#_______________________________________________________________________________________________
-# 4c. Run MCMC ----
-#_______________________________________________________________________________________________
-
-# run model
-model.fit <- nimbleMCMC(model = model.pred,
-                        monitors = params,
-                        nchains = 3,
-                        nburnin = 10000,
-                        niter = 20000,
-                        thin = 1,
-                        samplesAsCodaMCMC = TRUE)
-
-summary(model.fit)
-
-HPDinterval(model.fit)
-
-effectiveSize(model.fit)
-
-#_______________________________________________________________________________________________
-# 5. Extract HDIs for visualization ----
-#_______________________________________________________________________________________________
-
-# pack all chains together
-model.samples <- do.call(rbind, model.fit)
-
-# keep only the predictions as a df
-model.samples.1 <- as.data.frame(model.samples[ , 4:ncol(model.samples)])
-
-# calculate HDIs
-model.hdi <- hdi(model.samples.1, ci = 0.95)
-
-# calculate posterior median
-model.median <- apply(model.samples.1, 2, median)
-
-# put back into data.frame
-fates.to.pred.1 <- fates.to.pred %>%
-  
-  mutate(med = model.median,
-         low.hdi = model.hdi$CI_low,
-         upp.hdi = model.hdi$CI_high) %>%
+) %>%
   
   # allow for conditional formatting
   # here we'll give an index for each of the two "censor-as-dead" scenarios
@@ -179,19 +81,19 @@ fates.to.pred.1 <- fates.to.pred %>%
     scenario = case_when(
       
       # scenario 2, only those above 75% prob get flipped
-      low.hdi > 0.75 ~ "scen2",
+      l95 > 0.75 ~ "scen2",
       
       # scenario 3, those above 50% get flipped
-      low.hdi > 0.5 & low.hdi <= 0.75 ~ "scen3",
+      l95 > 0.5 & l95 <= 0.75 ~ "scen3",
       
       # any others don't get flipped at all
-      low.hdi <= 0.5 ~ "scen0"
+      l95 <= 0.5 ~ "scen0"
     )
     
   ) %>%
   
   # arrange by lower interval
-  arrange(low.hdi) %>%
+  arrange(l95) %>%
   
   mutate(unique.arrange = 1:n())
 
@@ -199,7 +101,7 @@ fates.to.pred.1 <- fates.to.pred %>%
 # 6. Visualize ----
 #_______________________________________________________________________________________________
 
-ggplot(data = fates.to.pred.1) +
+ggplot(data = glm.pred.1) +
   
   theme_bw() +
   
@@ -210,14 +112,14 @@ ggplot(data = fates.to.pred.1) +
              linetype = "dashed") +
   
   geom_errorbar(aes(x = unique.arrange,
-                    ymin = low.hdi,
-                    ymax = upp.hdi,
+                    ymin = l95,
+                    ymax = u95,
                     color = scenario),
                 width = 0,
                 linewidth = 0.55) +
   
   geom_point(aes(x = unique.arrange,
-                 y = med,
+                 y = mean,
                  fill = scenario),
              shape = 21,
              size = 0.55) +
@@ -247,18 +149,18 @@ ggplot(data = fates.to.pred.1) +
 # 7. Flip outcomes in new dataset ----
 #_______________________________________________________________________________________________
 
-fates.to.pred.2 <- fates.to.pred.1 %>%
+fates.to.pred.2 <- glm.pred.1 %>%
   
   # binary indicator for which ones get flipped
   mutate(
     
     # scenario 2 (75%)
-    flip.scen2 = ifelse(low.hdi > 0.75,
+    flip.scen2 = ifelse(l95 > 0.75,
                         1,
                         0),
     
     # scenario 3 (50%)
-    flip.scen3 = ifelse(low.hdi > 0.5,
+    flip.scen3 = ifelse(l95 > 0.5,
                         1, 
                         0)
     
@@ -281,7 +183,7 @@ fates.new <- fates.new %>%
 
 # write function that will "flip" zeroes to ones according to fates.to.pred.2
 flip_fates <- function (df) {
-
+  
   if (df$deployment.1[1] %in% fates.to.pred.2$deployment.1) {
     
     # index of event row
@@ -293,7 +195,7 @@ flip_fates <- function (df) {
     
     df$y.mort.scen3[event.ind] = fates.to.pred.2$flip.scen3[fates.to.pred.2$deployment.1 == df$deployment.1[1]]
     df$y.pred.scen3[event.ind] = fates.to.pred.2$flip.scen3[fates.to.pred.2$deployment.1 == df$deployment.1[1]]
-
+    
   }
   
   return(df)
@@ -346,8 +248,8 @@ fates.new.3 <- fates.new.2 %>%
     BCI.1,
     BCI.2,
     p.dm,
-    p.open,
-    moon,
+    p.o,
+    p.js,
     post1,
     post2,
     ret,
@@ -366,4 +268,4 @@ fates.new.3 <- fates.new.2 %>%
 # 9. Write to .csv ----
 #_______________________________________________________________________________________________
 
-write.csv(fates.new.3, "Cleaned data/fates_forModel.csv")
+write.csv(fates.new.3, "Cleaned data/fates_forModel.csv", row.names = F)
