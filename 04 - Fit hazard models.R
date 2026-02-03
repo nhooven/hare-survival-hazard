@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 25 Nov 2025
-# Date last modified: 02 Feb 2026 
+# Date last modified: 03 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -25,28 +25,8 @@ library(mgcv)            # construct basis functions for cyclic splines
 fates <- read.csv("Cleaned data/fates_forModel.csv")
 day.lookup <- read.csv("Cleaned data/day_lookup.csv")
 
-# join in snow-on/snow-off
-snow.week <- day.lookup %>%
-  
-  group_by(study.week) %>%
-  
-  summarize(clust1 = max(snow.on.sfl),
-            clust2 = max(snow.on.sfl),
-            clust3 = max(snow.on.sfl),
-            clust4 = max(snow.on.xmc)) %>%
-  
-  pivot_longer(cols = c(clust1:clust4)) %>%
-  
-  mutate(cluster = case_when(name == "clust1" ~ 1,
-                             name == "clust2" ~ 2,
-                             name == "clust3" ~ 3,
-                             name == "clust4" ~ 4)) %>%
-  
-  rename(snow = value) %>%
-  
-  dplyr::select(study.week, cluster, snow)
-
-fates <- fates %>% left_join(snow.week)
+# look at correlation
+cor(fates[, c(20, 21)])
 
 #_______________________________________________________________________________________________
 # 3. Construct basis functions for spline on hazard ----
@@ -106,12 +86,10 @@ fates.1 <- list(
   
   # extrinsic
   study_week = (fates$study.week - mean(fates$study.week)) / sd(fates$study.week),
-  moon = (fates$moon - mean(fates$moon)) / sd(fates$moon),
-  snow = fates$snow,
   
   # landscape
   dm = (fates$p.dm - mean(fates$p.dm)) / sd(fates$p.dm),
-  open = (fates$p.open - mean(fates$p.open)) / sd(fates$p.open),
+  open = (fates$p.o - mean(fates$p.o)) / sd(fates$p.o),
   
   # spline
   basis = basis
@@ -136,9 +114,7 @@ params <- c("a0",
             "hr_pil_total1",
             "hr_pil_total2",
             "hr_dm",
-            "hr_open",
-            "hr_moon_on",
-            "hr_moon_off")
+            "hr_open")
 
 #_______________________________________________________________________________________________
 # 4c. Initial values for MCMC ----
@@ -178,9 +154,7 @@ inits <- list(
   b_pil_post1 = rnorm(1, 0, 2.5),
   b_pil_post2 = rnorm(1, 0, 2.5),
   b_dm = rnorm(1, 0, 2.5),
-  b_open = rnorm(1, 0, 2.5),
-  b_moon = rnorm(1, 0, 2.5),
-  b_moon_snow = rnorm(1, 0, 2.5)
+  b_open = rnorm(1, 0, 2.5)
   
 )
 
@@ -212,10 +186,6 @@ model.code.1 <- nimbleCode({
   
   # intrinsic / extrinsic interactions
   b_bci_study_week ~ dt(0, sigma = 2.5, df = 1)
-  
-  # extrinsic
-  b_moon ~ dt(0, sigma = 2.5, df = 1)
-  b_moon_snow ~ dt(0, sigma = 2.5, df = 1)
   
   # landscape
   b_dm ~ dt(0, sigma = 2.5, df = 1)
@@ -286,16 +256,13 @@ model.code.1 <- nimbleCode({
         b_pil_post1 * post1[i] * pil[i] +
         b_pil_post2 * post2[i] * pil[i] +
         b_dm * dm[i] +
-        b_open * open[i] +
-        b_moon * moon[i] +
-        b_moon_snow * moon[i] * snow[i]
+        b_open * open[i]
         
         )
       
       )
     
   }
-  
   
   # derived quantities (hazard ratios)
   hr_bci <- exp(b_bci)
@@ -306,8 +273,6 @@ model.code.1 <- nimbleCode({
   hr_pil_total2 <- exp(b_pil + b_pil_post2)
   hr_dm <- exp(b_dm)
   hr_open <- exp(b_open)
-  hr_moon_off <- exp(b_moon)
-  hr_moon_on <- exp(b_moon + b_moon_snow)
   
 })
 
@@ -342,7 +307,7 @@ model.hmc.comp.1 <- compileNimble(model.hmc.1, project = model.1)
 model.fit.1 <- runMCMC(
   
   mcmc = model.hmc.comp.1,          
-  nchains = 1,                     
+  nchains = 3,                     
   nburnin = 7000,                   # 3000 total posterior samples
   niter = 8000, 
   samplesAsCodaMCMC = TRUE
@@ -384,6 +349,10 @@ model.code.2 <- nimbleCode({
   # intrinsic / extrinsic interactions
   b_bci_study_week ~ dt(0, sigma = 2.5, df = 1)
   
+  # landscape
+  b_dm ~ dt(0, sigma = 2.5, df = 1)
+  b_open ~ dt(0, sigma = 2.5, df = 1)
+  
   # treatment variables
   b_ret ~ dt(0, sigma = 2.5, df = 1)
   b_pil ~ dt(0, sigma = 2.5, df = 1)
@@ -397,12 +366,12 @@ model.code.2 <- nimbleCode({
   # non-centered random spline parameters (sex / forest type)
   for (y in 1:nsf) {
     
-    # cluster-specific intercepts
+    # sex/forest type-specific intercepts
     a0_z[y] ~ dnorm(0, sd = 1)
     
     a0[y] <- a0_mean + a0_sigma * a0_z[y]
     
-    # cluster-specific smoothing penalty parameter (lambda)
+    # sex/forest type-specific smoothing penalty parameter (lambda)
     lambda_raw_z[y] ~ dnorm(0, sd = 1)
     
     lambda[y] <- exp(lambda_raw_mean + lambda_raw_sigma * lambda_raw_z[y])
@@ -441,20 +410,21 @@ model.code.2 <- nimbleCode({
         exp(
           
           b_bci * bci_1[i] +
-            b_bci_study_week * bci_1[i] * study_week[i] +
-            b_ret * ret[i] + 
-            b_ret_post1 * post1[i] * ret[i] +
-            b_ret_post2 * post2[i] * ret[i] +
-            b_pil * pil[i] + 
-            b_pil_post1 * post1[i] * pil[i] +
-            b_pil_post2 * post2[i] * pil[i]
+          b_bci_study_week * bci_1[i] * study_week[i] +
+          b_ret * ret[i] + 
+          b_ret_post1 * post1[i] * ret[i] +
+          b_ret_post2 * post2[i] * ret[i] +
+          b_pil * pil[i] + 
+          b_pil_post1 * post1[i] * pil[i] +
+          b_pil_post2 * post2[i] * pil[i] +
+          b_dm * dm[i] +
+          b_open * open[i]
           
         )
       
     )
     
   }
-  
   
   # derived quantities (hazard ratios)
   hr_bci <- exp(b_bci)
@@ -463,6 +433,8 @@ model.code.2 <- nimbleCode({
   hr_ret_total2 <- exp(b_ret + b_ret_post2)
   hr_pil_total1 <- exp(b_pil + b_pil_post1)
   hr_pil_total2 <- exp(b_pil + b_pil_post2)
+  hr_dm <- exp(b_dm)
+  hr_open <- exp(b_open)
   
 })
 
@@ -539,6 +511,10 @@ model.code.3 <- nimbleCode({
   # intrinsic / extrinsic interactions
   b_bci_study_week ~ dt(0, sigma = 2.5, df = 1)
   
+  # landscape
+  b_dm ~ dt(0, sigma = 2.5, df = 1)
+  b_open ~ dt(0, sigma = 2.5, df = 1)
+  
   # treatment variables
   b_ret ~ dt(0, sigma = 2.5, df = 1)
   b_pil ~ dt(0, sigma = 2.5, df = 1)
@@ -552,12 +528,12 @@ model.code.3 <- nimbleCode({
   # non-centered random spline parameters (sex / forest type)
   for (y in 1:nsf) {
     
-    # cluster-specific intercepts
+    # sex/forest type-specific intercepts
     a0_z[y] ~ dnorm(0, sd = 1)
     
     a0[y] <- a0_mean + a0_sigma * a0_z[y]
     
-    # cluster-specific smoothing penalty parameter (lambda)
+    # sex/forest type-specific smoothing penalty parameter (lambda)
     lambda_raw_z[y] ~ dnorm(0, sd = 1)
     
     lambda[y] <- exp(lambda_raw_mean + lambda_raw_sigma * lambda_raw_z[y])
@@ -602,14 +578,15 @@ model.code.3 <- nimbleCode({
             b_ret_post2 * post2[i] * ret[i] +
             b_pil * pil[i] + 
             b_pil_post1 * post1[i] * pil[i] +
-            b_pil_post2 * post2[i] * pil[i]
+            b_pil_post2 * post2[i] * pil[i] +
+            b_dm * dm[i] +
+            b_open * open[i]
           
         )
       
     )
     
   }
-  
   
   # derived quantities (hazard ratios)
   hr_bci <- exp(b_bci)
@@ -618,6 +595,8 @@ model.code.3 <- nimbleCode({
   hr_ret_total2 <- exp(b_ret + b_ret_post2)
   hr_pil_total1 <- exp(b_pil + b_pil_post1)
   hr_pil_total2 <- exp(b_pil + b_pil_post2)
+  hr_dm <- exp(b_dm)
+  hr_open <- exp(b_open)
   
 })
 
