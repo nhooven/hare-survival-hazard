@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2025 
 # Date completed: 01 Dec 2025
-# Date last modified: 26 Jan 2026
+# Date last modified: 04 Feb 2026
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -42,6 +42,8 @@ hr_pivot <- function (x, scen = "1") {
     
     dplyr::select(hr_bci,
                   hr_bci_study_week,
+                  hr_dm,
+                  hr_open,
                   hr_ret_total1,
                   hr_ret_total2,
                   hr_pil_total1,
@@ -52,13 +54,17 @@ hr_pivot <- function (x, scen = "1") {
     # reorder factor
     mutate(name = factor(name,
                          levels = c("hr_bci",
-                                      "hr_bci_study_week",
-                                      "hr_ret_total1",
-                                      "hr_ret_total2",
-                                      "hr_pil_total1",
-                                      "hr_pil_total2"),
+                                    "hr_bci_study_week",
+                                    "hr_dm",
+                                    "hr_open",
+                                    "hr_ret_total1",
+                                    "hr_ret_total2",
+                                    "hr_pil_total1",
+                                    "hr_pil_total2"),
                          labels = c("BCI",
                                     "BCI * t", 
+                                    "DM",
+                                    "OPEN",
                                     "RET (yr 1)",
                                     "RET (yr 2)",
                                     "PIL (yr 1)",
@@ -129,13 +135,16 @@ plot_by_scen <- function (long.draws, ci) {
     
     mutate(
       
-     vartype = ifelse(
-      
-      name %in% c("BCI", "BCI * t"),
-      "intrinsic",
-      "treatment"
-      
-    ) 
+     vartype = case_when(
+       
+       name %in% c("BCI", "BCI * t") ~ "intrinsic",
+       name %in% c("DM", "OPEN") ~ "landscape",
+       name %in% c("RET (yr 1)",
+                   "RET (yr 2)",
+                   "PIL (yr 1)",
+                   "PIL (yr 2)") ~ "treatment"
+       
+     )
       
   )
   
@@ -143,13 +152,16 @@ plot_by_scen <- function (long.draws, ci) {
     
     mutate(
       
-      vartype = ifelse(
+      vartype = case_when(
         
-        name %in% c("BCI", "BCI * t"),
-        "intrinsic",
-        "treatment"
+        name %in% c("BCI", "BCI * t") ~ "intrinsic",
+        name %in% c("DM", "OPEN") ~ "landscape",
+        name %in% c("RET (yr 1)",
+                    "RET (yr 2)",
+                    "PIL (yr 1)",
+                    "PIL (yr 2)") ~ "treatment"
         
-      ) 
+      )
       
     )
   
@@ -194,8 +206,8 @@ out.plot <- ggplot() +
                  position = position_nudge(y = -0.1)) +
   
   # fill and color
-  scale_fill_manual(values = c("gray60", "#FF3300")) +
-  scale_color_manual(values = c("gray40", "#FF3300")) +
+  scale_fill_manual(values = c("gray60", "green4", "#FF3300")) +
+  scale_color_manual(values = c("gray40", "green4", "#FF3300")) +
   
   # axis title
   xlab("Hazard ratio") +
@@ -208,7 +220,7 @@ out.plot <- ggplot() +
   
   # coordinates
   coord_cartesian(xlim = c(0.45, 2.95),
-                  ylim = c(1.3, 6)) +
+                  ylim = c(1.3, 8)) +
   
   # remove gridlines, remove legend
   theme(panel.grid = element_blank(),

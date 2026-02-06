@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 26 Jan 2026 
+# Date last modified: 06 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -91,7 +91,9 @@ fates.1 <- fates %>%
   
   # standardize BCI.1
   mutate(BCI.s = (BCI.1 - mean(BCI.1)) / sd(BCI.1),
-         study.week.s = (study.week - mean(study.week)) / sd(study.week))
+         study.week.s = (study.week - mean(study.week)) / sd(study.week),
+         p.dm.s = (p.dm - mean(p.dm)) / sd(p.dm),
+         p.open.s = (p.o - mean(p.o)) / sd(p.o))
 
 #_______________________________________________________________________________________________
 # 3c. Spline for prediction ----
@@ -180,6 +182,8 @@ calc_haz <- function (x) {
     # total hazard ratio prediction
     hr.pred = exp(log(y$hr_bci) * x$BCI.s +
                     log(y$hr_bci_study_week) * x$study.week.s * x$BCI.s +
+                    log(y$hr_dm) * x$p.dm.s +
+                    log(y$hr_open) * x$p.open.s +
                     log(y$hr_pil_total1) * x$post1 * x$pil +
                     log(y$hr_pil_total2) * x$post2 * x$pil +
                     log(y$hr_ret_total1) * x$post1 * x$ret +
@@ -356,7 +360,7 @@ for (i in 1:3000) {
   
 }
 
-# completed 01-25-2026
+# completed 02-05-2026
 discrep.all.i <- read.csv("PPCs/discrep_all_i.csv")
 
 #_______________________________________________________________________________________________

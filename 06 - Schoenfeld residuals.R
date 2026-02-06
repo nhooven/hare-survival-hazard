@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 17 Nov 2025 
-# Date last modified: 22 Jan 2026 
+# Date last modified: 04 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -51,7 +51,9 @@ extract_hr <- function (x) {
       hr_pil_total1,
       hr_pil_total2,
       hr_ret_total1,
-      hr_ret_total2
+      hr_ret_total2,
+      hr_dm,
+      hr_open
       
     )
   
@@ -95,9 +97,11 @@ fates.1 <- fates %>%
     
   ) %>%
   
-  # standardize BCI.1 and study.week
+  # standardize variables
   mutate(BCI.s = (BCI.1 - mean(BCI.1)) / sd(BCI.1),
-         study.week.s = (study.week - mean(study.week)) / sd(study.week))
+         study.week.s = (study.week - mean(study.week)) / sd(study.week),
+         p.dm.s = (p.dm - mean(p.dm)) / sd(p.dm),
+         p.open.s = (p.o - mean(p.o)) / sd(p.o))
 
 #_______________________________________________________________________________________________
 # 3c. Split dataset by study year ----
@@ -314,6 +318,109 @@ schoen_resid_trt <- function (
 }
 
 #_______________________________________________________________________________________________
+# 4c. Landscape variables ----
+#_______________________________________________________________________________________________
+
+# input is a df split into a list by study.week
+
+schoen_resid_lsm <- function (
+    
+  x,
+  response = "y.mort.scen1",     # which variable should we look for 1s in?
+  ci = 0.90,
+  scenario = 1
+  
+) {
+  
+  # which model fit to use?
+  model.fit.hr <- case_when(scenario == 1 ~ model.fit.1.hr,
+                            scenario == 2 ~ model.fit.2.hr,
+                            scenario == 3 ~ model.fit.3.hr)
+  
+  # only proceed if there are > 0 events
+  if (1 %in% x[[response]]) {
+    
+    # calculate mean risk-weighted covariate value for each posterior HR draw
+    # create blank vectors
+    rw.cov.vec.mean.dm <- vector(length = nrow(model.fit.hr))    # mean
+    rw.cov.vec.mean.open <- vector(length = nrow(model.fit.hr))    # mean
+    rw.cov.vec.var.dm <- vector(length = nrow(model.fit.hr))    # variance
+    rw.cov.vec.var.open <- vector(length = nrow(model.fit.hr))    # variance
+    
+    # loop through all iterations
+    for (i in 1:nrow(model.fit.1.hr)) {
+        
+      rw.cov.vec.mean.dm[i] <- mean(x$p.dm.s * model.fit.hr$hr_dm[i]) 
+      rw.cov.vec.mean.open[i] <- mean(x$p.open.s * model.fit.hr$hr_open[i]) 
+      rw.cov.vec.var.dm[i] <- var(x$p.dm.s * model.fit.hr$hr_dm[i]) 
+      rw.cov.vec.var.open[i] <- var(x$p.open.s * model.fit.hr$hr_open[i]) 
+      
+    }
+    
+    # calculate scaled Schoenfeld residual for all events at risk-time (for each draw)
+    # subset of events
+    x.event <- x[x[[response]] == 1, ]
+    
+    # blank matrices
+    schoen.matrix.dm <- matrix(data = NA,
+                                nrow = nrow(model.fit.hr),
+                                ncol = sum(x[[response]]))
+    
+    schoen.matrix.open <- matrix(data = NA,
+                                 nrow = nrow(model.fit.hr),
+                                 ncol = sum(x[[response]]))
+    
+    for (j in 1:sum(x[[response]])) {
+      
+      schoen.matrix.dm[ ,j] <- (x.event$p.dm.s[j] - rw.cov.vec.mean.dm) * (1 / rw.cov.vec.var.dm)
+      
+      schoen.matrix.open[ ,j] <- (x.event$p.open.s[j] - rw.cov.vec.mean.open) * (1 / rw.cov.vec.var.open)
+      
+    }
+    
+    # extract the median and upper/lower credible intervals for each observation
+    # blank dfs
+    schoen.df.dm <- data.frame()
+    schoen.df.open <- data.frame()
+    
+    for (k in 1:ncol(schoen.matrix.dm)) {
+      
+      focal.df.dm <- data.frame(
+        
+        study.week = x$study.week[1],
+        l.ci = as.numeric(bayestestR::hdi(schoen.matrix.dm[ ,k], ci = ci))[2],
+        med = median(schoen.matrix.dm[ ,k]),
+        u.ci = as.numeric(bayestestR::hdi(schoen.matrix.dm[ ,k], ci = ci))[3],
+        ls = "dm"
+        
+      )
+      
+      focal.df.open <- data.frame(
+        
+        study.week = x$study.week[1],
+        l.ci = as.numeric(bayestestR::hdi(schoen.matrix.open[ ,k], ci = ci))[2],
+        med = median(schoen.matrix.open[ ,k]),
+        u.ci = as.numeric(bayestestR::hdi(schoen.matrix.open[ ,k], ci = ci))[3],
+        ls = "open"
+        
+      )
+      
+      # bind in
+      schoen.df.dm <- rbind(schoen.df.dm, focal.df.dm)
+      schoen.df.open <- rbind(schoen.df.open, focal.df.open)
+      
+    }
+    
+    # bind together
+    schoen.df <- rbind(schoen.df.dm, schoen.df.open)
+    
+    return(schoen.df)
+    
+  }
+  
+}
+
+#_______________________________________________________________________________________________
 # 5. Calculate Schoenfeld residals ----
 #_______________________________________________________________________________________________
 # 5a. BCI ----
@@ -357,9 +464,11 @@ ggplot(data = schoen.bci.test.3) +
   geom_smooth(aes(x = study.week,
                   y = med),
               method = "gam",
-              se = T)
+              se = T) +
+  
+  coord_cartesian(ylim = c(-50, 50))
 
-# we successfully de-trended these
+# yeah, not really a trend here
 
 #_______________________________________________________________________________________________
 # 5b. Treatment ----
@@ -494,3 +603,48 @@ ggplot(data = schoen.trt.all.3) +
   
   theme(legend.position = "none")
 
+#_______________________________________________________________________________________________
+# 5c. Landscape ----
+#_______________________________________________________________________________________________
+
+# model 1
+schoen.lsm.test.1 <- do.call(rbind, 
+                             lapply(split(fates.1, fates.1$study.week), 
+                                    schoen_resid_lsm,
+                                    response = "y.mort.scen1",
+                                    ci = 0.90,
+                                    scenario = 1))
+
+# model 2
+schoen.lsm.test.2 <- do.call(rbind, 
+                             lapply(split(fates.1, fates.1$study.week), 
+                                    schoen_resid_lsm,
+                                    response = "y.mort.scen2",
+                                    ci = 0.90,
+                                    scenario = 2))
+
+# model 3
+schoen.lsm.test.3 <- do.call(rbind, 
+                             lapply(split(fates.1, fates.1$study.week), 
+                                    schoen_resid_lsm,
+                                    response = "y.mort.scen3",
+                                    ci = 0.90,
+                                    scenario = 3))
+
+# plot test
+ggplot(data = schoen.lsm.test.3) +
+  
+  theme_bw() +
+  
+  geom_point(aes(x = study.week,
+                 y = med)) +
+  
+  geom_hline(yintercept = 0,
+             linetype = "dashed") +
+  
+  geom_smooth(aes(x = study.week,
+                  y = med),
+              method = "gam",
+              se = T)
+
+# exactly what I hoped to see!

@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 26 Jan 2026 
+# Date last modified: 06 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -85,7 +85,9 @@ fates.1 <- fates %>%
   
   # standardize BCI.1
   mutate(BCI.s = (BCI.1 - mean(BCI.1)) / sd(BCI.1),
-         study.week.s = (study.week - mean(study.week)) / sd(study.week))
+         study.week.s = (study.week - mean(study.week)) / sd(study.week),
+         p.dm.s = (p.dm - mean(p.dm)) / sd(p.dm),
+         p.open.s = (p.o - mean(p.o)) / sd(p.o))
 
 #_______________________________________________________________________________________________
 # 3c. Spline for prediction ----
@@ -205,6 +207,11 @@ km.df.2 <- kap_mei(fates.2,
 km.df.3 <- kap_mei(fates.2,
                    response = "y.mort.scen3")
 
+# bind together
+km.df.all <- rbind(km.df.1 %>% mutate(scen = "1"),
+                   km.df.2 %>% mutate(scen = "2"),
+                   km.df.3 %>% mutate(scen = "3"))
+
 # plot each
 ggplot() +
   
@@ -281,7 +288,7 @@ expand_time <- function (x, max.t = 150) {
   # keep only one row
   x.1 <- x %>%
     
-    dplyr::select(deployment.1, site, sex_forest, BCI.s, study.week) %>%
+    dplyr::select(deployment.1, site, sex_forest, p.dm.s, p.open.s, BCI.s, study.week) %>%
     
     slice(1) %>%
     
@@ -350,6 +357,8 @@ expand_time <- function (x, max.t = 150) {
       Site = x.1$Site,
       sex_forest = x.1$sex_forest,
       BCI.s = x.1$BCI.s,
+      p.dm.s = x.1$p.dm.s,
+      p.open.s = x.1$p.open.s,
       study.week = study.week,
       study.week.s = study.week.s,
       week = week,
@@ -474,13 +483,15 @@ sim_lifetime <- function (x) {
     # total hazard ratio prediction
     hr = exp(log(y$hr_bci) * x$BCI.s +
                log(y$hr_bci_study_week) * x$study.week.s * x$BCI.s +
+               log(y$hr_dm) * x$p.dm.s +
+               log(y$hr_open) * x$p.open.s +
                log(y$hr_pil_total1) * x$post1 * x$pil +
                log(y$hr_pil_total2) * x$post2 * x$pil +
                log(y$hr_ret_total1) * x$post1 * x$ret +
                log(y$hr_ret_total2) * x$post2 * x$ret)
     
     # full hazard
-    full.haz = blh * hr.pred
+    full.haz = blh * hr
     
     # return
     return(full.haz)
@@ -593,11 +604,9 @@ deploy.split <- split(fates.2, fates.2$deployment.1)
 #_______________________________________________________________________________________________
 
 # loop through draws
-all.km.curves <- data.frame()
+S.df.all <- data.frame()
 
 for (i in 1:nrow(model.fit.1)) {
-  
-  tictoc::tic()
   
   # extract focal iteration
   iter.draw1 <- model.fit.1[i, ]
@@ -621,14 +630,15 @@ for (i in 1:nrow(model.fit.1)) {
   # add iter column
   S.df$iter <- i
   
-  tictoc::toc()
+  # bind in (forgot this!)
+  S.df.all <- rbind(S.df.all, S.df)
   
   # print status and save to .csv every 50 iterations
   if (i %% 50 == 0) {
     
     print(paste0("Completed iteration ", i, " of 3000"))
     
-    write.csv(S.df, "S_all_i")
+    write.csv(S.df.all, "S_all_i")
     
   }
   
@@ -638,41 +648,22 @@ for (i in 1:nrow(model.fit.1)) {
 # 10 h
 (13 * 3000) / 3600
 
-# 01-26-2026
-# will run overnight
-
-
-
-
-
-
 #_______________________________________________________________________________________________
-# 8. Final survivorship curves for PPC
-#_______________________________________________________________________________________________
-# 8a. Read in data ----
+# 7. Read data back in ----
 #_______________________________________________________________________________________________
 
-km.1.1 <- read.csv(paste0(getwd(), "/KM curves/km_mod1_1.csv"))
-km.1.2 <- read.csv(paste0(getwd(), "/KM curves/km_mod1_2.csv"))
-km.2.1 <- read.csv(paste0(getwd(), "/KM curves/km_mod2_1.csv"))
-km.2.2 <- read.csv(paste0(getwd(), "/KM curves/km_mod2_2.csv"))
-km.3.1 <- read.csv(paste0(getwd(), "/KM curves/km_mod3_1.csv"))
-km.3.2 <- read.csv(paste0(getwd(), "/KM curves/km_mod3_2.csv"))
+S.df <- read.csv("PPCs/S_all_i.csv")
 
 #_______________________________________________________________________________________________
-# 8b. Join and summarize data ----
+# 8. Final survivorship curves for PPC ----
 #_______________________________________________________________________________________________
-
-km.1 <- rbind(km.1.1, km.1.2)
-km.2 <- rbind(km.2.1, km.2.2)
-km.3 <- rbind(km.3.1, km.3.2)
 
 # prediction envelopes
 km_pred <- function (x) {
   
   x.1 <- x %>%
     
-    group_by(t) %>%
+    group_by(scen, t) %>%
     
     mutate(med = median(S),
            pe.low = quantile(S, prob = 0.025),
@@ -682,15 +673,13 @@ km_pred <- function (x) {
     
     ungroup() %>%
     
-    dplyr::select(t, med, pe.low, pe.upp)
+    dplyr::select(t, med, pe.low, pe.upp, scen)
   
   return(x.1)
   
 }
 
-km.1.pred <- km_pred(km.1) 
-km.2.pred <- km_pred(km.2) 
-km.3.pred <- km_pred(km.3) 
+km.ppc <- km_pred(S.df)  
 
 #_______________________________________________________________________________________________
 # 8c. Plot with empirical curve ----
@@ -704,27 +693,33 @@ km_theme <- function () {
   theme_bw() +
     
     theme(panel.grid = element_blank(),
-          panel.border = element_blank(),
-          axis.line = element_line(),
-          axis.text = element_text(color = "black"))
+          axis.text = element_text(color = "black"),
+          strip.text = element_text(hjust = 0),
+          strip.background = element_rect(fill = "white"))
   
 }
 
+# change "scen" labels
+km.ppc$scen.name <- paste0("Scenario ", km.ppc$scen)
+km.df.all$scen.name <- paste0("Scenario ", km.df.all$scen)
+
 #_______________________________________________________________________________________________
 
-# scenario 1
-km.scen1 <- ggplot() +
+ggplot() +
   
   km_theme() +
   
+  # facet
+  facet_wrap(~ scen.name) +
+  
   # simulated prediction envelopes
-  geom_line(data = km.1.pred,
+  geom_line(data = km.ppc,
             aes(x = t,
                 y = med),
             color = "aquamarine4",
             linewidth = 1) +
   
-  geom_ribbon(data = km.1.pred,
+  geom_ribbon(data = km.ppc,
               aes(x = t,
                   y = med,
                   ymin = pe.low,
@@ -733,7 +728,7 @@ km.scen1 <- ggplot() +
               fill = "aquamarine4") +
   
   # empirical curve confidence envelope
-  geom_ribbon(data = km.df.1,
+  geom_ribbon(data = km.df.all,
               aes(x = t,
                   y = S,
                   ymin = ci.low,
@@ -744,113 +739,15 @@ km.scen1 <- ggplot() +
               linetype = "dashed") +
   
   # empirical curve
-  geom_line(data = km.df.1,
+  geom_line(data = km.df.all,
             aes(x = t,
                 y = S),
             linetype = "dashed") +
   
-  xlab("") +
+  xlab("Weeks") +
   ylab("Cumulative survival") +
   
   coord_cartesian(ylim = c(0, 1),
                   xlim = c(4.25, 70))
 
-# scenario 2
-km.scen2 <- ggplot() +
-  
-  km_theme() +
-  
-  # simulated prediction envelopes
-  geom_line(data = km.2.pred,
-            aes(x = t,
-                y = med),
-            color = "aquamarine4",
-            linewidth = 1) +
-  
-  geom_ribbon(data = km.2.pred,
-              aes(x = t,
-                  y = med,
-                  ymin = pe.low,
-                  ymax = pe.upp),
-              alpha = 0.35,
-              fill = "aquamarine4") +
-  
-  # empirical curve confidence envelope
-  geom_ribbon(data = km.df.2,
-              aes(x = t,
-                  y = S,
-                  ymin = ci.low,
-                  ymax = ci.upp),
-              alpha = 0.15,
-              color = "gray50",
-              fill = NA,
-              linetype = "dashed") +
-  
-  # empirical curve
-  geom_line(data = km.df.2,
-            aes(x = t,
-                y = S),
-            linetype = "dashed") +
-  
-  xlab("Weeks since deployment") +
-  ylab("") +
-  
-  coord_cartesian(ylim = c(0, 1),
-                  xlim = c(4.25, 70))
-
-# scenario 3
-km.scen3 <- ggplot() +
-  
-  km_theme() +
-  
-  # simulated prediction envelopes
-  geom_line(data = km.3.pred,
-            aes(x = t,
-                y = med),
-            color = "aquamarine4",
-            linewidth = 1) +
-  
-  geom_ribbon(data = km.3.pred,
-              aes(x = t,
-                  y = med,
-                  ymin = pe.low,
-                  ymax = pe.upp),
-              alpha = 0.35,
-              fill = "aquamarine4") +
-  
-  # empirical curve confidence envelope
-  geom_ribbon(data = km.df.3,
-              aes(x = t,
-                  y = S,
-                  ymin = ci.low,
-                  ymax = ci.upp),
-              alpha = 0.15,
-              color = "gray50",
-              fill = NA,
-              linetype = "dashed") +
-  
-  # empirical curve
-  geom_line(data = km.df.3,
-            aes(x = t,
-                y = S),
-            linetype = "dashed") +
-  
-  xlab("") +
-  ylab("") +
-  
-  coord_cartesian(ylim = c(0, 1),
-                  xlim = c(4.25, 70))
-
-#_______________________________________________________________________________________________
-# 8d. Plot together ----
-
-library(cowplot)
-
-#_______________________________________________________________________________________________
-
-plot_grid(km.scen1, km.scen2, km.scen3,
-          nrow = 1,
-          labels = c("a", "b", "c"),
-          label_x = 0.92)
-
-# 900 x 300
+# 900 x 343

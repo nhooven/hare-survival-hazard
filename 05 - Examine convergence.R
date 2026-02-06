@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 22 Jan 2026 
 # Date completed: 22 Jan 2026 
-# Date last modified: 26 Jan 2026 
+# Date last modified: 04 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -31,31 +31,31 @@ param.names <- colnames(model.1[[1]])
 #_______________________________________________________________________________________________
 
 # model 1
-MCMCsummary(model.1, params = c("a0", "lambda", param.names[c(7:12)]))
+MCMCsummary(model.1, params = c("a0", "lambda", param.names[c(7:14)]))
 
 # model 2
-MCMCsummary(model.2, params = c("a0", "lambda", param.names[c(7:12)]))
+MCMCsummary(model.2, params = c("a0", "lambda", param.names[c(7:14)]))
 
 # model 3
-MCMCsummary(model.3, params = c("a0", "lambda", param.names[c(7:12)]))
+MCMCsummary(model.3, params = c("a0", "lambda", param.names[c(7:14)]))
 
 #_______________________________________________________________________________________________
 # 4. Traceplots for HRs ----
 #_______________________________________________________________________________________________
 
 # model 1
-MCMCtrace(model.1, params = c(param.names[c(7:12)]), pdf = F)
+MCMCtrace(model.1, params = c(param.names[c(7:14)]), pdf = F)
 
 # model 2
-MCMCtrace(model.2, params = c(param.names[c(7:12)]), pdf = F)
+MCMCtrace(model.2, params = c(param.names[c(7:14)]), pdf = F)
 
 # model 3
-MCMCtrace(model.3, params = c(param.names[c(7:12)]), pdf = F)
+MCMCtrace(model.3, params = c(param.names[c(7:14)]), pdf = F)
 
 #_______________________________________________________________________________________________
 # 5. Save Rhat and ESS for hazard ratios ----
 #_______________________________________________________________________________________________
 
-write.table(MCMCsummary(model.1, params = c(param.names[c(7:12)])), "clipboard", sep = "\t")
-write.table(MCMCsummary(model.2, params = c(param.names[c(7:12)])), "clipboard", sep = "\t")
-write.table(MCMCsummary(model.3, params = c(param.names[c(7:12)])), "clipboard", sep = "\t")
+write.table(MCMCsummary(model.1, params = c(param.names[c(7:14)])), "clipboard", sep = "\t")
+write.table(MCMCsummary(model.2, params = c(param.names[c(7:14)])), "clipboard", sep = "\t")
+write.table(MCMCsummary(model.3, params = c(param.names[c(7:14)])), "clipboard", sep = "\t")

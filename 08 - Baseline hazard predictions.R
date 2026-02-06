@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 16 Dec 2025 
-# Date last modified: 23 Jan 2026 
+# Date last modified: 04 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -362,13 +362,14 @@ ggplot(data =
   scale_x_continuous(breaks = month.cutoffs$breaks + 2,
                      labels = month.cutoffs$labels) +
   
-  scale_y_continuous(breaks = c(0, 0.03, 0.06, 0.09, 0.12, 0.15)) +
+  scale_y_continuous(breaks = c(0, 0.06, 0.12, 0.18, 0.24)) +
   
   # axis labels
   ylab("Baseline hazard") +
   
   # coordinates
-  coord_cartesian(xlim = c(3.5, 49.7)) +
+  coord_cartesian(xlim = c(3.5, 49.7),
+                  ylim = c(0.0125, 0.25)) +
   
   # colors
   scale_color_manual(values = c("#003300", "#669900")) +
@@ -436,13 +437,14 @@ ggplot(data =
   scale_x_continuous(breaks = month.cutoffs$breaks + 2,
                      labels = month.cutoffs$labels) +
   
-  scale_y_continuous(breaks = c(0, 0.03, 0.06, 0.09, 0.12, 0.15)) +
+  scale_y_continuous(breaks = c(0, 0.06, 0.12, 0.18, 0.24)) +
   
   # axis labels
   ylab("Baseline hazard") +
   
   # coordinates
-  coord_cartesian(xlim = c(3.5, 49.7)) +
+  coord_cartesian(xlim = c(3.5, 49.7),
+                  ylim = c(0.0125, 0.25)) +
   
   # colors
   scale_color_manual(values = c("#003300", "#669900")) +
@@ -510,13 +512,14 @@ ggplot(data =
   scale_x_continuous(breaks = month.cutoffs$breaks + 2,
                      labels = month.cutoffs$labels) +
   
-  scale_y_continuous(breaks = c(0, 0.03, 0.06, 0.09, 0.12, 0.15)) +
+  scale_y_continuous(breaks = c(0, 0.06, 0.12, 0.18, 0.24)) +
   
   # axis labels
   ylab("Baseline hazard") +
   
   # coordinates
-  coord_cartesian(xlim = c(3.5, 49.7)) +
+  coord_cartesian(xlim = c(3.5, 49.7),
+                  ylim = c(0.0125, 0.25)) +
   
   # colors
   scale_color_manual(values = c("#003300", "#669900")) +
