@@ -5,14 +5,13 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 25 Nov 2025
-# Date last modified: 25 Feb 2026 
+# Date last modified: 26 Feb 2026 
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
 # 1. Load required packages ----
 #_______________________________________________________________________________________________
 
-library(tidyverse)       # manipulate and clean data
 library(nimble)          # modeling with nimble
 library(nimbleHMC)       # HMC in nimble
 library(coda)            # model outputs
@@ -104,7 +103,7 @@ model.code <- nimbleCode({
       a0sc[s, c] ~ dnorm(a0s[s], sd = 1)
       
       # lamsc - lambda - smoothing penalties [2 x 4]
-      lamsc[s, c] ~ dnorm(log(lams[s]), sd = 1)
+      log(lamsc[s, c]) ~ dnorm(log(lams[s]), sd = 1)
       
       # wsc - spline weights [2 x 4 x nbasis]
       for (b in 1:nbasis) {
@@ -161,7 +160,6 @@ model.code <- nimbleCode({
   hr_dm <- exp(b_dm)
   hr_open <- exp(b_open)
     
-    
 })
 
 # ______________________________________________________________________________
@@ -209,7 +207,7 @@ inits <- list(
   a0sc = matrix(rnorm(2 * 4, 0, sd = 1),
                 nrow = 2,
                 ncol = 4),
-  lamsc = matrix(rnorm(2 * 4, 0, sd = 1),
+  lamsc = matrix(rexp(2 * 4, 1),
                  nrow = 2,
                  ncol = 4),
   
