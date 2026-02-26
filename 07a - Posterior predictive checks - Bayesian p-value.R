@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 06 Feb 2026 
+# Date last modified: 26 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -28,7 +28,7 @@
 # 1. Load required packages ----
 #_______________________________________________________________________________________________
 
-library(tidyverse)       # manipulate and clean data
+library(dplyr)       # manipulate and clean data
 library(mgcv)
 
 #_______________________________________________________________________________________________
@@ -133,28 +133,44 @@ fates.1.split <- split(fates.1, fates.1$study.week)
 calc_blh <- function (x) {
   
   # x is a collection of individuals subject to the same BLH
-  # same study.week, same sex, same forest type
+  # same study.week, same sex, same cluster
   
   # function to take model draws and calculate the collective BLH
   calc_spline_pred <- function (x, y) {
     
     # y is the focal iteration
-    # extract spline weights w
-    w <- t(as.matrix(as.numeric(c(y[paste0("w", "[", x$sex_forest[1], ", 1]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 2]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 3]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 4]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 5]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 6]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 7]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 8]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 9]")]))))
+    # extract spline weights - wsc[s, c, b]
+    w <- t(
+      
+      as.matrix(
+        
+        as.numeric(
+          
+          c(
+            
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")]
+            
+            )
+          
+          )
+        
+        )
+      
+      )
     
     # multiply and sum to create "normal" scale spline prediction
     w.by.b.sum <- apply(sweep(basis.pred, 2, w, `*`), 1, sum)
     
     # add to intercept and exponentiate
-    blh = as.numeric(exp(y[paste0("a0[", x$sex_forest[1], "]")] + w.by.b.sum[x$week[1]]))
+    blh = as.numeric(exp(y[paste0("a0sc[", x$sex[1] + 1, ", ", x$cluster[1], "]")] + w.by.b.sum[x$week[1]]))
     
     # return
     return(blh)
@@ -181,13 +197,13 @@ calc_haz <- function (x) {
     # y is the focal iteration
     # total hazard ratio prediction
     hr.pred = exp(log(y$hr_bci) * x$BCI.s +
-                    log(y$hr_bci_study_week) * x$study.week.s * x$BCI.s +
-                    log(y$hr_dm) * x$p.dm.s +
-                    log(y$hr_open) * x$p.open.s +
-                    log(y$hr_pil_total1) * x$post1 * x$pil +
-                    log(y$hr_pil_total2) * x$post2 * x$pil +
-                    log(y$hr_ret_total1) * x$post1 * x$ret +
-                    log(y$hr_ret_total2) * x$post2 * x$ret)
+                  log(y$hr_bci_study_week) * x$study.week.s * x$BCI.s +
+                  log(y$hr_dm) * x$p.dm.s +
+                  log(y$hr_open) * x$p.open.s +
+                  log(y$hr_pil_total1) * x$post1 * x$pil +
+                  log(y$hr_pil_total2) * x$post2 * x$pil +
+                  log(y$hr_ret_total1) * x$post1 * x$ret +
+                  log(y$hr_ret_total2) * x$post2 * x$ret)
     
     # full hazard
     full.haz = x[ , blh] * hr.pred
@@ -272,96 +288,113 @@ e_sim_morts <- function (x) {
 
 #_______________________________________________________________________________________________
 # 5b. Loop ----
-
-# one iteration takes 6.16 s
-(6.16 * 3000) / 3600
-# just over 5 hours
-
 #_______________________________________________________________________________________________
 
-# loop through iterations
-discrep.all.i <- data.frame()
-
-for (i in 1:3000) {
+discrep_all <- function () {
   
-  # extract focal iteration
-  iter.draw1 <- model.fit.1[i, ]
-  iter.draw2 <- model.fit.2[i, ]
-  iter.draw3 <- model.fit.3[i, ]
+  # loop through iterations
+  discrep.i.ALL <- data.frame()
   
-  # loop through study.weeks
-  discrep.df.all.j <- data.frame()
-  
-  for (j in 1:max(fates.1$study.week)) {
+  for (i in 1:1) {
     
-    # subset one week
-    focal.week <- fates.1[fates.1$study.week == j, ]
+    # extract focal iteration
+    iter.draw1 <- model.fit.1[i, ]
+    iter.draw2 <- model.fit.2[i, ]
+    iter.draw3 <- model.fit.3[i, ]
     
-    # apply baseline hazard calculation function
-    # split by sex-FT
-    sft.split <- split(focal.week, focal.week$sex_forest)
+    # loop through study.weeks
+    discrep.j.ALL <- data.frame()
     
-    # returns a df including blh
-    focal.week.1 <- do.call(rbind, lapply(sft.split, calc_blh))
+    for (j in 1:max(fates.1$study.week)) {
+      
+      # subset one week
+      focal.week <- fates.1[fates.1$study.week == j, ]
+      
+      # apply baseline hazard calculation function
+      # split by sex-cluster
+      # create new variable
+      focal.week$sc <- paste0(focal.week$sex, "_", focal.week$cluster)
+      
+      sc.split <- split(focal.week, focal.week$sc)
+      
+      # returns a df including blh
+      focal.week.1 <- do.call(rbind, lapply(sc.split, calc_blh))
+      
+      # apply full hazard calculation function
+      # split by deployment
+      deploy.split <- split(focal.week.1, focal.week.1$deployment.1)
+      
+      # returns a df with full hazard columns
+      focal.week.2 <- do.call(rbind, lapply(deploy.split, calc_haz))
+      
+      # calculate expected mortalities and simulate
+      # returns a df with scen and boolean column Dsim > Dobs
+      # we'll add a j index
+      discrep.df <- cbind(j, e_sim_morts(focal.week.2))
+      
+      # bind into master df
+      discrep.df.all.j <- rbind(discrep.df.all.j, discrep.df)
+      
+    }
     
-    # apply full hazard calculation function
-    # split by deployment
-    deploy.split <- split(focal.week.1, focal.week.1$deployment.1)
-    
-    # returns a df with full hazard columns
-    focal.week.2 <- do.call(rbind, lapply(deploy.split, calc_haz))
-    
-    # calculate expected mortalities and simulate
-    # returns a df with scen and boolean column Dsim > Dobs
-    # we'll add a j index
-    discrep.df <- cbind(j, e_sim_morts(focal.week.2))
-    
-    # bind into master df
-    discrep.df.all.j <- rbind(discrep.df.all.j, discrep.df)
-    
-  }
-  
-  # sum over all study-weeks
-  discrep.j.sum <- discrep.df.all.j %>%
-    
-    summarize(discrep.sim.1.sum = sum(discrep.sim.1),
-              discrep.sim.2.sum = sum(discrep.sim.2),
-              discrep.sim.3.sum = sum(discrep.sim.3),
-              discrep.obs.1.sum = sum(discrep.obs.1),
-              discrep.obs.2.sum = sum(discrep.obs.2),
-              discrep.obs.3.sum = sum(discrep.obs.3)) %>%
-    
+    # sum over all study-weeks
+    discrep.j.sum <- discrep.df.all.j %>%
+      
+      summarize(
+        
+        discrep.sim.1.sum = sum(discrep.sim.1),
+        discrep.sim.2.sum = sum(discrep.sim.2),
+        discrep.sim.3.sum = sum(discrep.sim.3),
+        discrep.obs.1.sum = sum(discrep.obs.1),
+        discrep.obs.2.sum = sum(discrep.obs.2),
+        discrep.obs.3.sum = sum(discrep.obs.3)
+        
+        ) %>%
+      
+      # keep only the sum columns
+      dplyr::select(discrep.sim.1.sum, discrep.sim.2.sum, discrep.sim.3.sum,
+                    discrep.obs.1.sum, discrep.obs.2.sum, discrep.obs.3.sum) %>%
+      
+      # and add an index for i
+      mutate(i = i)
+      
     # boolean Dsim > Dobs
-    mutate(
+    discrep.i <- discrep.j.sum %>%
+    
+      mutate(
+        
+        Dsim.Dobs.1 = discrep.sim.1.sum > discrep.obs.1.sum,
+        Dsim.Dobs.2 = discrep.sim.2.sum > discrep.obs.2.sum,
+        Dsim.Dobs.3 = discrep.sim.3.sum > discrep.obs.3.sum
+        
+      ) %>%
       
-      Dsim.Dobs.1 = discrep.sim.1.sum > discrep.obs.1.sum,
-      Dsim.Dobs.2 = discrep.sim.2.sum > discrep.obs.2.sum,
-      Dsim.Dobs.3 = discrep.sim.3.sum > discrep.obs.3.sum
+      # keep only the Dsim > Dobs columns
+      dplyr::select(Dsim.Dobs.1, Dsim.Dobs.2, Dsim.Dobs.3) %>%
       
-    ) %>%
+      # and add an index for i
+      mutate(i = i)
     
-    # keep only the Dsim > Dobs columns
-    dplyr::select(Dsim.Dobs.1, Dsim.Dobs.2, Dsim.Dobs.3) %>%
-    
-    # and add an index for i
-    mutate(i = i)
-  
-  # and bind in
-  discrep.all.i <- rbind(discrep.all.i, discrep.j.sum)
-  
-  # print status and save to .csv every 50 iterations
-  if (i %% 50 == 0) {
-    
-    print(paste0("Completed iteration ", i, " of 3000"))
-    
-    write.csv(discrep.all.i, "discrep_all_i.csv")
+    # bind in both
+    discrep.j.ALL <- rbind(discrep.j.ALL, discrep.j.sum)
+    discrep.i.ALL <- rbind(discrep.i.ALL, discrep.i)
     
   }
+  
+  # list
+  discrep.all <- list(
+    
+    discrep.j.ALL,    # summed discrepancy values (for plotting)
+    discrep.i.ALL     # for Bayesian p-value
+    
+  )
+  
+  return(discrep.all)
   
 }
 
-# completed 02-05-2026
-discrep.all.i <- read.csv("PPCs/discrep_all_i.csv")
+discrep_all()
+
 
 #_______________________________________________________________________________________________
 # 6. Calculate Bayesian p-values ----

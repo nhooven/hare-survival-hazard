@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 06 Feb 2026 
+# Date last modified: 26 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -21,9 +21,8 @@
 # 1. Load required packages ----
 #_______________________________________________________________________________________________
 
-library(tidyverse)       # manipulate and clean data
+library(dplyr)       # manipulate and clean data
 library(mgcv)
-library(tictoc)          # timing
 
 #_______________________________________________________________________________________________
 # 2. Read in data ----
@@ -194,6 +193,8 @@ kap_mei <- function (
   
 }
 
+# REMOVE FOR KAMIAK!!!
+
 # apply function
 # model 1
 km.df.1 <- kap_mei(fates.2,
@@ -288,7 +289,7 @@ expand_time <- function (x, max.t = 150) {
   # keep only one row
   x.1 <- x %>%
     
-    dplyr::select(deployment.1, site, sex_forest, p.dm.s, p.open.s, BCI.s, study.week) %>%
+    dplyr::select(deployment.1, cluster, site, sex, p.dm.s, p.open.s, BCI.s, study.week) %>%
     
     slice(1) %>%
     
@@ -355,7 +356,8 @@ expand_time <- function (x, max.t = 150) {
       
       deploy = x.1$deployment.1,
       Site = x.1$Site,
-      sex_forest = x.1$sex_forest,
+      cluster = x.1$cluster,
+      sex = x.1$sex,
       BCI.s = x.1$BCI.s,
       p.dm.s = x.1$p.dm.s,
       p.open.s = x.1$p.open.s,
@@ -463,32 +465,49 @@ sim_lifetime <- function (x) {
   calc_spline_pred <- function (x, y) {
     
     # y is the focal iteration
-    # extract spline weights w
-    w <- t(as.matrix(as.numeric(c(y[paste0("w", "[", x$sex_forest[1], ", 1]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 2]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 3]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 4]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 5]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 6]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 7]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 8]")],
-                                  y[paste0("w", "[", x$sex_forest[1], ", 9]")]))))
+    # extract spline weights - wsc[s, c, b]
+    w <- t(
+      
+      as.matrix(
+        
+        as.numeric(
+          
+          c(
+            
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")]
+            
+          )
+          
+        )
+        
+      )
+      
+    )
     
     # multiply and sum to create "normal" scale spline prediction
     w.by.b.sum <- apply(sweep(basis.pred, 2, w, `*`), 1, sum)
     
     # add to intercept and exponentiate
-    blh = as.numeric(exp(y[paste0("a0[", x$sex_forest, "]")] + w.by.b.sum[x$week]))
+    blh = as.numeric(exp(y[paste0("a0sc[", x$sex[1] + 1, ", ", x$cluster[1], "]")] + w.by.b.sum[x$week[1]]))
+
     
     # total hazard ratio prediction
     hr = exp(log(y$hr_bci) * x$BCI.s +
-               log(y$hr_bci_study_week) * x$study.week.s * x$BCI.s +
-               log(y$hr_dm) * x$p.dm.s +
-               log(y$hr_open) * x$p.open.s +
-               log(y$hr_pil_total1) * x$post1 * x$pil +
-               log(y$hr_pil_total2) * x$post2 * x$pil +
-               log(y$hr_ret_total1) * x$post1 * x$ret +
-               log(y$hr_ret_total2) * x$post2 * x$ret)
+             log(y$hr_bci_study_week) * x$study.week.s * x$BCI.s +
+             log(y$hr_dm) * x$p.dm.s +
+             log(y$hr_open) * x$p.open.s +
+             log(y$hr_pil_total1) * x$post1 * x$pil +
+             log(y$hr_pil_total2) * x$post2 * x$pil +
+             log(y$hr_ret_total1) * x$post1 * x$ret +
+             log(y$hr_ret_total2) * x$post2 * x$ret)
     
     # full hazard
     full.haz = blh * hr
@@ -606,7 +625,7 @@ deploy.split <- split(fates.2, fates.2$deployment.1)
 # loop through draws
 S.df.all <- data.frame()
 
-for (i in 1:nrow(model.fit.1)) {
+for (i in 1:3000) {
   
   # extract focal iteration
   iter.draw1 <- model.fit.1[i, ]
@@ -633,27 +652,8 @@ for (i in 1:nrow(model.fit.1)) {
   # bind in (forgot this!)
   S.df.all <- rbind(S.df.all, S.df)
   
-  # print status and save to .csv every 50 iterations
-  if (i %% 50 == 0) {
-    
-    print(paste0("Completed iteration ", i, " of 3000"))
-    
-    write.csv(S.df.all, "S_all_i")
-    
-  }
-  
 }
-
-# ~ 13 s per iteration
-# 10 h
-(13 * 3000) / 3600
-
-#_______________________________________________________________________________________________
-# 7. Read data back in ----
-#_______________________________________________________________________________________________
-
-S.df <- read.csv("PPCs/S_all_i.csv")
-
+  
 #_______________________________________________________________________________________________
 # 8. Final survivorship curves for PPC ----
 #_______________________________________________________________________________________________
