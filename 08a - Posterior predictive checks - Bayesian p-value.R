@@ -1,11 +1,11 @@
 # Project: WSU Snowshoe Hare and PCT Project
 # Subproject: Survival and hazard modeling
-# Script: 07a - Posterior predictive checks - Bayesian p-value
+# Script: 08a - Posterior predictive checks - Bayesian p-value
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 26 Feb 2026 
+# Date last modified: 27 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -149,14 +149,14 @@ calc_blh <- function (x) {
           c(
             
             y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")]
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 2]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 3]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 4]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 5]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 6]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 7]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 8]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 9]")]
             
             )
           
@@ -290,110 +290,100 @@ e_sim_morts <- function (x) {
 # 5b. Loop ----
 #_______________________________________________________________________________________________
 
-discrep_all <- function () {
+# loop through iterations
+discrep.sum.ALL <- data.frame()
+discrep.i.ALL <- data.frame()
   
-  # loop through iterations
-  discrep.i.ALL <- data.frame()
+for (i in 1:3000) {
   
-  for (i in 1:1) {
+  # extract focal iteration
+  iter.draw1 <- model.fit.1[i, ]
+  iter.draw2 <- model.fit.2[i, ]
+  iter.draw3 <- model.fit.3[i, ]
+  
+  # loop through study.weeks
+  discrep.i.j <- data.frame()
+  
+  for (j in 1:max(fates.1$study.week)) {
     
-    # extract focal iteration
-    iter.draw1 <- model.fit.1[i, ]
-    iter.draw2 <- model.fit.2[i, ]
-    iter.draw3 <- model.fit.3[i, ]
+    # subset one week
+    focal.week <- fates.1[fates.1$study.week == j, ]
     
-    # loop through study.weeks
-    discrep.j.ALL <- data.frame()
+    # apply baseline hazard calculation function
+    # split by sex-cluster
+    # create new variable
+    focal.week$sc <- paste0(focal.week$sex + 1, "_", focal.week$cluster)
     
-    for (j in 1:max(fates.1$study.week)) {
-      
-      # subset one week
-      focal.week <- fates.1[fates.1$study.week == j, ]
-      
-      # apply baseline hazard calculation function
-      # split by sex-cluster
-      # create new variable
-      focal.week$sc <- paste0(focal.week$sex, "_", focal.week$cluster)
-      
-      sc.split <- split(focal.week, focal.week$sc)
-      
-      # returns a df including blh
-      focal.week.1 <- do.call(rbind, lapply(sc.split, calc_blh))
-      
-      # apply full hazard calculation function
-      # split by deployment
-      deploy.split <- split(focal.week.1, focal.week.1$deployment.1)
-      
-      # returns a df with full hazard columns
-      focal.week.2 <- do.call(rbind, lapply(deploy.split, calc_haz))
-      
-      # calculate expected mortalities and simulate
-      # returns a df with scen and boolean column Dsim > Dobs
-      # we'll add a j index
-      discrep.df <- cbind(j, e_sim_morts(focal.week.2))
-      
-      # bind into master df
-      discrep.df.all.j <- rbind(discrep.df.all.j, discrep.df)
-      
-    }
+    sc.split <- split(focal.week, focal.week$sc)
     
-    # sum over all study-weeks
-    discrep.j.sum <- discrep.df.all.j %>%
-      
-      summarize(
-        
-        discrep.sim.1.sum = sum(discrep.sim.1),
-        discrep.sim.2.sum = sum(discrep.sim.2),
-        discrep.sim.3.sum = sum(discrep.sim.3),
-        discrep.obs.1.sum = sum(discrep.obs.1),
-        discrep.obs.2.sum = sum(discrep.obs.2),
-        discrep.obs.3.sum = sum(discrep.obs.3)
-        
-        ) %>%
-      
-      # keep only the sum columns
-      dplyr::select(discrep.sim.1.sum, discrep.sim.2.sum, discrep.sim.3.sum,
-                    discrep.obs.1.sum, discrep.obs.2.sum, discrep.obs.3.sum) %>%
-      
-      # and add an index for i
-      mutate(i = i)
-      
-    # boolean Dsim > Dobs
-    discrep.i <- discrep.j.sum %>%
+    # returns a df including blh
+    focal.week.1 <- do.call(rbind, lapply(sc.split, calc_blh))
     
-      mutate(
-        
-        Dsim.Dobs.1 = discrep.sim.1.sum > discrep.obs.1.sum,
-        Dsim.Dobs.2 = discrep.sim.2.sum > discrep.obs.2.sum,
-        Dsim.Dobs.3 = discrep.sim.3.sum > discrep.obs.3.sum
-        
+    # apply full hazard calculation function
+    # split by deployment
+    deploy.split <- split(focal.week.1, focal.week.1$deployment.1)
+    
+    # returns a df with full hazard columns
+    focal.week.2 <- do.call(rbind, lapply(deploy.split, calc_haz))
+    
+    # calculate expected mortalities and simulate
+    # returns a df with scen and boolean column Dsim > Dobs
+    # we'll add a j index
+    discrep.df <- cbind(j, e_sim_morts(focal.week.2))
+    
+    # bind into master df
+    discrep.i.j <- rbind(discrep.i.j, discrep.df)
+    
+  } # j
+  
+  # sum over all study-weeks
+  discrep.i.j.sum <- discrep.i.j %>%
+    
+    summarize(
+      
+      discrep.sim.1.sum = sum(discrep.sim.1),
+      discrep.sim.2.sum = sum(discrep.sim.2),
+      discrep.sim.3.sum = sum(discrep.sim.3),
+      discrep.obs.1.sum = sum(discrep.obs.1),
+      discrep.obs.2.sum = sum(discrep.obs.2),
+      discrep.obs.3.sum = sum(discrep.obs.3)
+      
       ) %>%
+    
+    # keep only the sum columns
+    dplyr::select(discrep.sim.1.sum, discrep.sim.2.sum, discrep.sim.3.sum,
+                  discrep.obs.1.sum, discrep.obs.2.sum, discrep.obs.3.sum) %>%
+    
+    # and add an index for i
+    mutate(i = i)
+    
+  # boolean Dsim > Dobs
+  discrep.i <- discrep.i.j.sum %>%
+  
+    mutate(
       
-      # keep only the Dsim > Dobs columns
-      dplyr::select(Dsim.Dobs.1, Dsim.Dobs.2, Dsim.Dobs.3) %>%
+      Dsim.Dobs.1 = discrep.sim.1.sum > discrep.obs.1.sum,
+      Dsim.Dobs.2 = discrep.sim.2.sum > discrep.obs.2.sum,
+      Dsim.Dobs.3 = discrep.sim.3.sum > discrep.obs.3.sum
       
-      # and add an index for i
-      mutate(i = i)
+    ) %>%
     
-    # bind in both
-    discrep.j.ALL <- rbind(discrep.j.ALL, discrep.j.sum)
-    discrep.i.ALL <- rbind(discrep.i.ALL, discrep.i)
+    # keep only the Dsim > Dobs columns
+    dplyr::select(Dsim.Dobs.1, Dsim.Dobs.2, Dsim.Dobs.3) %>%
     
-  }
+    # and add an index for i
+    mutate(i = i)
   
-  # list
-  discrep.all <- list(
-    
-    discrep.j.ALL,    # summed discrepancy values (for plotting)
-    discrep.i.ALL     # for Bayesian p-value
-    
-  )
+  # bind in both
+  discrep.sum.ALL <- rbind(discrep.sum.ALL, discrep.i.j.sum)
+  discrep.i.ALL <- rbind(discrep.i.ALL, discrep.i)
   
-  return(discrep.all)
+} # i
   
-}
 
-discrep_all()
+    
+discrep.sum.ALL  # summed discrepancy values (for plotting)
+discrep.i.ALL     # for Bayesian p-value
 
 
 #_______________________________________________________________________________________________

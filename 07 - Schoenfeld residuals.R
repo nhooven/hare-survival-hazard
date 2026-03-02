@@ -1,11 +1,11 @@
 # Project: WSU Snowshoe Hare and PCT Project
 # Subproject: Survival and hazard modeling
-# Script: 06 - Schoenfeld residuals
+# Script: 07 - Schoenfeld residuals
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 17 Nov 2025 
-# Date last modified: 04 Feb 2026 
+# Date last modified: 27 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -463,12 +463,13 @@ ggplot(data = schoen.bci.test.3) +
   
   geom_smooth(aes(x = study.week,
                   y = med),
-              method = "gam",
+              method = "loess",
               se = T) +
   
   coord_cartesian(ylim = c(-50, 50))
 
-# yeah, not really a trend here
+# still some weirdly large residuals between weeks ~20-50
+# I think we had very few mortalities here. The rest of the study seems fine
 
 #_______________________________________________________________________________________________
 # 5b. Treatment ----
@@ -635,6 +636,8 @@ schoen.lsm.test.3 <- do.call(rbind,
 ggplot(data = schoen.lsm.test.3) +
   
   theme_bw() +
+  
+  facet_wrap(~ ls) +
   
   geom_point(aes(x = study.week,
                  y = med)) +

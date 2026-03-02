@@ -1,11 +1,11 @@
 # Project: WSU Snowshoe Hare and PCT Project
 # Subproject: Survival and hazard modeling
-# Script: 06b - Posterior predictive checks - survivorship curves
+# Script: 08b - Posterior predictive checks - survivorship curves
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 26 Feb 2026 
+# Date last modified: 27 Feb 2026 
 # R version: 4.2.2
 
 #_______________________________________________________________________________________________
@@ -475,14 +475,14 @@ sim_lifetime <- function (x) {
           c(
             
             y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")],
-            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 1]")]
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 2]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 3]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 4]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 5]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 6]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 7]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 8]")],
+            y[paste0("wsc", "[", x$sex[1] + 1, ", ", x$cluster[1], ", 9]")]
             
           )
           
@@ -625,7 +625,7 @@ deploy.split <- split(fates.2, fates.2$deployment.1)
 # loop through draws
 S.df.all <- data.frame()
 
-for (i in 1:3000) {
+for (i in 1:1) {
   
   # extract focal iteration
   iter.draw1 <- model.fit.1[i, ]
