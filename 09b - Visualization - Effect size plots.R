@@ -1,12 +1,12 @@
 # Project: WSU Snowshoe Hare and PCT Project
 # Subproject: Survival and hazard modeling
-# Script: 08 - Effect size plots
+# Script: 09b - Effect size plots
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2025 
 # Date completed: 01 Dec 2025
-# Date last modified: 04 Feb 2026
-# R version: 4.2.2
+# Date last modified: 02 Mar 2026
+# R version: 4.4.3
 
 #_______________________________________________________________________________________________
 # 1. Load required packages ----

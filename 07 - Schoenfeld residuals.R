@@ -6,7 +6,7 @@
 # Date began: 14 Nov 2025 
 # Date completed: 17 Nov 2025 
 # Date last modified: 27 Feb 2026 
-# R version: 4.2.2
+# R version: 4.4.3
 
 #_______________________________________________________________________________________________
 # 1. Load required packages ----
