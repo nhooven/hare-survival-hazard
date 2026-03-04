@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 18 Feb 2026
 # Date completed: 19 Feb 2026
-# Date last modified: 19 Feb 2026
+# Date last modified: 03 Mar 2026
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
@@ -388,9 +388,11 @@ ggplot() +
                fill = cause.species.1)) +
   
   theme(panel.grid = element_blank(),
+        panel.border = element_rect(color = "gray"),
         axis.text = element_text(color = "black"),
         axis.text.x = element_text(size = 7),
-        strip.background = element_rect(fill = "white"),
+        strip.background = element_rect(fill = "gray90",
+                                        linetype = "blank"),
         strip.text = element_text(hjust = 0),
         legend.title = element_blank()) +
   

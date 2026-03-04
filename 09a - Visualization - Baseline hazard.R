@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 02 Mar 2026 
-# Date last modified: 02 Mar 2026 
+# Date last modified: 03 Mar 2026 
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
@@ -207,7 +207,7 @@ spline_forPlot <- function (x) {
       lz = ifelse(cluster == 4, "XMC", "SFL"),
       
       # change labels
-      sex = factor(sex, labels = c("sex == F", "sex == M")),
+      sex = factor(sex, labels = c("Females", "Males")),
       cluster = factor(cluster, labels = c("Cluster 1",
                                            "Cluster 2",
                                            "Cluster 3",
@@ -301,8 +301,11 @@ haz_plot <- function (x) {
                   color = lz),
               linewidth = 0.9) +
     
+    theme(panel.border = element_rect(color = "black")) +
+    
     # theme arguments
     theme(panel.grid = element_blank(),
+          panel.border = element_rect(color = "gray"),
           axis.title.x = element_blank(),
           axis.text = element_text(color = "black"),
           axis.text.x = element_text(vjust = 0.25,
@@ -313,7 +316,8 @@ haz_plot <- function (x) {
           legend.background = element_rect(color = "black"),
           strip.text = element_text(hjust = 0),
           strip.text.x = element_text(size = 7),
-          strip.background = element_rect(fill = "white")) +
+          strip.background = element_rect(fill = "gray90",
+                                          linetype = "blank")) +
     
     # axis labels
     scale_x_continuous(breaks = month.cutoffs.some$breaks,
@@ -372,6 +376,7 @@ haz_plot_all <- function (x) {
     
     # theme arguments
     theme(panel.grid = element_blank(),
+          panel.border = element_rect(color = "gray"),
           axis.title.x = element_blank(),
           axis.text = element_text(color = "black"),
           axis.text.x = element_text(vjust = 0.25,
@@ -383,7 +388,8 @@ haz_plot_all <- function (x) {
           legend.title = element_text(size = 8),
           strip.text = element_text(hjust = 0),
           strip.text.x = element_text(size = 7),
-          strip.background = element_rect(fill = "white")) +
+          strip.background = element_rect(fill = "gray90",
+                                          linetype = "blank")) +
     
     # axis labels
     scale_x_continuous(breaks = month.cutoffs.some$breaks,
@@ -402,6 +408,8 @@ haz_plot_all <- function (x) {
     scale_fill_viridis_d()
   
 }
+
+haz_plot_all(spline.forPlot.all)
 
 # 600 x 360 
 
@@ -442,6 +450,7 @@ hr_plot <- function (x) {
     
     # theme arguments
     theme(panel.grid = element_blank(),
+          panel.border = element_rect(color = "gray"),
           axis.title.x = element_blank(),
           axis.text = element_text(color = "black"),
           axis.text.x = element_text(vjust = 0.25,
@@ -452,7 +461,8 @@ hr_plot <- function (x) {
           legend.background = element_rect(color = "black"),
           strip.text = element_text(hjust = 0),
           strip.text.x = element_text(size = 7),
-          strip.background = element_rect(fill = "white")) +
+          strip.background = element_rect(fill = "gray90",
+                                          linetype = "blank")) +
     
     # axis labels
     scale_x_continuous(breaks = month.cutoffs.some$breaks,

@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 17 Nov 2025 
-# Date last modified: 27 Feb 2026 
+# Date last modified: 04 Mar 2026 
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
@@ -148,10 +148,8 @@ schoen_resid_bci <- function (
     # loop through all iterations
     for (i in 1:nrow(model.fit.hr)) {
   
-        rw.cov.vec.mean[i] <- mean(x$BCI.s * model.fit.hr$hr_bci[i] +
-                                   x$BCI.s * x$study.week.s * model.fit.hr$hr_bci_study_week[i]) 
-        rw.cov.vec.var[i] <- var(x$BCI.s * model.fit.hr$hr_bci[i] +
-                                 x$BCI.s * x$study.week.s * model.fit.hr$hr_bci_study_week[i]) 
+        rw.cov.vec.mean[i] <- mean(x$BCI.s * model.fit.hr$hr_bci[i])
+        rw.cov.vec.var[i] <- var(x$BCI.s * model.fit.hr$hr_bci[i]) 
       
     }
     
@@ -181,7 +179,8 @@ schoen_resid_bci <- function (
         study.week = x$study.week[1],
         l.ci = as.numeric(bayestestR::hdi(schoen.matrix[ ,k], ci = ci))[2],
         med = median(schoen.matrix[ ,k]),
-        u.ci = as.numeric(bayestestR::hdi(schoen.matrix[ ,k], ci = ci))[3]
+        u.ci = as.numeric(bayestestR::hdi(schoen.matrix[ ,k], ci = ci))[3],
+        sd = sd(schoen.matrix[ , k])
         
       )
       
@@ -286,6 +285,7 @@ schoen_resid_trt <- function (
         l.ci = as.numeric(bayestestR::hdi(schoen.matrix.ret[ ,k], ci = ci))[2],
         med = median(schoen.matrix.ret[ ,k]),
         u.ci = as.numeric(bayestestR::hdi(schoen.matrix.ret[ ,k], ci = ci))[3],
+        sd = sd(schoen.matrix.ret[ ,k]),
         post = post,
         trt = "ret"
         
@@ -297,6 +297,7 @@ schoen_resid_trt <- function (
         l.ci = as.numeric(bayestestR::hdi(schoen.matrix.pil[ ,k], ci = ci))[2],
         med = median(schoen.matrix.pil[ ,k]),
         u.ci = as.numeric(bayestestR::hdi(schoen.matrix.pil[ ,k], ci = ci))[3],
+        sd = sd(schoen.matrix.pil[ ,k]),
         post = post,
         trt = "pil"
         
@@ -390,6 +391,7 @@ schoen_resid_lsm <- function (
         study.week = x$study.week[1],
         l.ci = as.numeric(bayestestR::hdi(schoen.matrix.dm[ ,k], ci = ci))[2],
         med = median(schoen.matrix.dm[ ,k]),
+        sd = sd(schoen.matrix.dm[ ,k]),
         u.ci = as.numeric(bayestestR::hdi(schoen.matrix.dm[ ,k], ci = ci))[3],
         ls = "dm"
         
@@ -400,6 +402,7 @@ schoen_resid_lsm <- function (
         study.week = x$study.week[1],
         l.ci = as.numeric(bayestestR::hdi(schoen.matrix.open[ ,k], ci = ci))[2],
         med = median(schoen.matrix.open[ ,k]),
+        sd = sd(schoen.matrix.open[ ,k]),
         u.ci = as.numeric(bayestestR::hdi(schoen.matrix.open[ ,k], ci = ci))[3],
         ls = "open"
         
@@ -427,36 +430,152 @@ schoen_resid_lsm <- function (
 #_______________________________________________________________________________________________
 
 # model 1
-schoen.bci.test.1 <- do.call(rbind, 
-                             lapply(split(fates.1, fates.1$study.week), 
-                                    schoen_resid_bci,
-                                    response = "y.mort.scen1",
-                                    ci = 0.90,
-                                    scenario = 1))
+schoen.bci.1 <- do.call(rbind, 
+                        lapply(split(fates.1, fates.1$study.week), 
+                               schoen_resid_bci,
+                               response = "y.mort.scen1",
+                               ci = 0.95,
+                               scenario = 1))
 
 # model 2
-schoen.bci.test.2 <- do.call(rbind, 
-                             lapply(split(fates.1, fates.1$study.week), 
-                                    schoen_resid_bci,
-                                    response = "y.mort.scen2",
-                                    ci = 0.90,
-                                    scenario = 2))
+schoen.bci.2 <- do.call(rbind, 
+                        lapply(split(fates.1, fates.1$study.week), 
+                               schoen_resid_bci,
+                               response = "y.mort.scen2",
+                               ci = 0.95,
+                               scenario = 2))
 
 # model 3
-schoen.bci.test.3 <- do.call(rbind, 
-                             lapply(split(fates.1, fates.1$study.week), 
-                                    schoen_resid_bci,
-                                    response = "y.mort.scen3",
-                                    ci = 0.90,
-                                    scenario = 3))
+schoen.bci.3 <- do.call(rbind, 
+                        lapply(split(fates.1, fates.1$study.week), 
+                               schoen_resid_bci,
+                               response = "y.mort.scen3",
+                               ci = 0.95,
+                               scenario = 3))
 
-# plot test
-ggplot(data = schoen.bci.test.3) +
+#_______________________________________________________________________________________________
+# 5b. Treatment ----
+#_______________________________________________________________________________________________
+
+# model 1
+schoen.trt.all.1 <- rbind(
+  
+  do.call(rbind, 
+          lapply(split(fates.1.post1, fates.1.post1$study.week), 
+                 schoen_resid_trt,
+                 response = "y.mort.scen1",
+                 post = 1,
+                 ci = 0.95,
+                 scenario = 1)),
+  do.call(rbind, 
+          lapply(split(fates.1.post2, fates.1.post2$study.week), 
+                 schoen_resid_trt,
+                 response = "y.mort.scen1",
+                 post = 2,
+                 ci = 0.95,
+                 scenario = 1))
+  
+)
+
+# model 2
+schoen.trt.all.2 <- rbind(
+  
+  do.call(rbind, 
+          lapply(split(fates.1.post1, fates.1.post1$study.week), 
+                 schoen_resid_trt,
+                 response = "y.mort.scen2",
+                 post = 1,
+                 ci = 0.95,
+                 scenario = 2)),
+  do.call(rbind, 
+          lapply(split(fates.1.post2, fates.1.post2$study.week), 
+                 schoen_resid_trt,
+                 response = "y.mort.scen2",
+                 post = 2,
+                 ci = 0.95,
+                 scenario = 2))
+  
+)
+
+# model 3
+schoen.trt.all.3 <- rbind(
+  
+  do.call(rbind, 
+          lapply(split(fates.1.post1, fates.1.post1$study.week), 
+                 schoen_resid_trt,
+                 response = "y.mort.scen3",
+                 post = 1,
+                 ci = 0.95,
+                 scenario = 3)),
+  do.call(rbind, 
+          lapply(split(fates.1.post2, fates.1.post2$study.week), 
+                 schoen_resid_trt,
+                 response = "y.mort.scen3",
+                 post = 2,
+                 ci = 0.95,
+                 scenario = 3))
+  
+)
+
+#_______________________________________________________________________________________________
+# 5c. Landscape ----
+#_______________________________________________________________________________________________
+
+# model 1
+schoen.lsm.1 <- do.call(rbind, 
+                        lapply(split(fates.1, fates.1$study.week), 
+                               schoen_resid_lsm,
+                               response = "y.mort.scen1",
+                               ci = 0.95,
+                               scenario = 1))
+
+# model 2
+schoen.lsm.2 <- do.call(rbind, 
+                        lapply(split(fates.1, fates.1$study.week), 
+                               schoen_resid_lsm,
+                               response = "y.mort.scen2",
+                               ci = 0.95,
+                               scenario = 2))
+
+# model 3
+schoen.lsm.3 <- do.call(rbind, 
+                        lapply(split(fates.1, fates.1$study.week), 
+                               schoen_resid_lsm,
+                               response = "y.mort.scen3",
+                               ci = 0.95,
+                               scenario = 3))
+
+#_______________________________________________________________________________________________
+# 6. Plot Schoenfeld residals ----
+#_______________________________________________________________________________________________
+# 6a. BCI ----
+#_______________________________________________________________________________________________
+
+# bind together
+schoen.bci.all <- rbind(schoen.bci.1 %>% mutate(scen = "Scenario 1"),
+                        schoen.bci.2 %>% mutate(scen = "Scenario 2"),
+                        schoen.bci.3 %>% mutate(scen = "Scenario 3"))
+
+
+# plot
+ggplot(data = schoen.bci.all) +
   
   theme_bw() +
   
+  facet_wrap(~ scen) +
+  
+  geom_errorbar(aes(x = study.week,
+                    y = med,
+                    ymin = l.ci,
+                    ymax = u.ci),
+                width = 0,
+                color = "gray75") +
+  
   geom_point(aes(x = study.week,
-                  y = med)) +
+                 y = med),
+             shape = 21,
+             size = 0.7,
+             fill=  "white") +
   
   geom_hline(yintercept = 0,
              linetype = "dashed") +
@@ -464,190 +583,116 @@ ggplot(data = schoen.bci.test.3) +
   geom_smooth(aes(x = study.week,
                   y = med),
               method = "loess",
-              se = T) +
+              se = T,
+              color = "aquamarine4",
+              fill = "aquamarine4") +
   
-  coord_cartesian(ylim = c(-50, 50))
+  theme(panel.grid = element_blank(),
+        axis.text = element_text(color = "black"),
+        strip.text = element_text(hjust = 0),
+        strip.background = element_blank()) +
+  
+  xlab("Study week") +
+  ylab("Scaled Schoenfeld residual")
 
-# still some weirdly large residuals between weeks ~20-50
-# I think we had very few mortalities here. The rest of the study seems fine
+# 667 x 291
 
 #_______________________________________________________________________________________________
-# 5b. Treatment ----
+# 6b. Treatment ----
 #_______________________________________________________________________________________________
 
-# model 1
-# apply function
-schoen.trt.post1 <- do.call(rbind, 
-                           lapply(split(fates.1.post1, fates.1.post1$study.week), 
-                                  schoen_resid_trt,
-                                  response = "y.mort.scen1",
-                                  post = 1,
-                                  ci = 0.90))
+# bind together
+schoen.trt.all <- rbind(schoen.trt.all.1 %>% mutate(scen = "Scenario 1"),
+                        schoen.trt.all.2 %>% mutate(scen = "Scenario 2"),
+                        schoen.trt.all.3 %>% mutate(scen = "Scenario 3"))
 
-schoen.trt.post2 <- do.call(rbind, 
-                            lapply(split(fates.1.post2, fates.1.post2$study.week), 
-                                   schoen_resid_trt,
-                                   response = "y.mort.scen1",
-                                   post = 2,
-                                   ci = 0.90))
 
-# bind together for plotting
-schoen.trt.all <- rbind(schoen.trt.post1, schoen.trt.post2)
-
-# plot test
+# plot
 ggplot(data = schoen.trt.all) +
   
   theme_bw() +
   
-  facet_wrap(~ trt) +
+  facet_grid(trt ~ scen) +
+  
+  geom_errorbar(aes(x = study.week,
+                    y = med,
+                    ymin = l.ci,
+                    ymax = u.ci),
+                width = 0,
+                color = "gray75") +
   
   geom_point(aes(x = study.week,
-                 y = med,
-                 color = as.factor(post))) +
-  
-  geom_hline(yintercept = 0,
-             linetype = "dashed") +
-  
-  geom_smooth(aes(x = study.week,
-                  y = med,
-                  group = as.factor(post)),
-              method = "gam",
-              se = T) +
-  
-  theme(legend.position = "none")
-
-# well, looks like we figured out the PH issue!
-
-# model 2
-# apply function
-schoen.trt.post1.2 <- do.call(rbind, 
-                            lapply(split(fates.1.post1, fates.1.post1$study.week), 
-                                   schoen_resid_trt,
-                                   response = "y.mort.scen2",
-                                   post = 1,
-                                   ci = 0.90,
-                                   scenario = 2))
-
-schoen.trt.post2.2 <- do.call(rbind, 
-                            lapply(split(fates.1.post2, fates.1.post2$study.week), 
-                                   schoen_resid_trt,
-                                   response = "y.mort.scen2",
-                                   post = 2,
-                                   ci = 0.90,
-                                   scenario = 2))
-
-# bind together for plotting
-schoen.trt.all.2 <- rbind(schoen.trt.post1.2, schoen.trt.post2.2)
-
-# plot test
-ggplot(data = schoen.trt.all.2) +
-  
-  theme_bw() +
-  
-  facet_wrap(~ trt) +
-  
-  geom_point(aes(x = study.week,
-                 y = med,
-                 color = as.factor(post))) +
-  
-  geom_hline(yintercept = 0,
-             linetype = "dashed") +
-  
-  geom_smooth(aes(x = study.week,
-                  y = med,
-                  group = as.factor(post)),
-              method = "gam",
-              se = T) +
-  
-  theme(legend.position = "none")
-
-# model 3
-# apply function
-schoen.trt.post1.3 <- do.call(rbind, 
-                              lapply(split(fates.1.post1, fates.1.post1$study.week), 
-                                     schoen_resid_trt,
-                                     response = "y.mort.scen3",
-                                     post = 1,
-                                     ci = 0.90,
-                                     scenario = 3))
-
-schoen.trt.post2.3 <- do.call(rbind, 
-                              lapply(split(fates.1.post2, fates.1.post2$study.week), 
-                                     schoen_resid_trt,
-                                     response = "y.mort.scen3",
-                                     post = 2,
-                                     ci = 0.90,
-                                     scenario = 3))
-
-# bind together for plotting
-schoen.trt.all.3 <- rbind(schoen.trt.post1.3, schoen.trt.post2.3)
-
-# plot test
-ggplot(data = schoen.trt.all.3) +
-  
-  theme_bw() +
-  
-  facet_wrap(~ trt) +
-  
-  geom_point(aes(x = study.week,
-                 y = med,
-                 color = as.factor(post))) +
-  
-  geom_hline(yintercept = 0,
-             linetype = "dashed") +
-  
-  geom_smooth(aes(x = study.week,
-                  y = med,
-                  group = as.factor(post)),
-              method = "gam",
-              se = T) +
-  
-  theme(legend.position = "none")
-
-#_______________________________________________________________________________________________
-# 5c. Landscape ----
-#_______________________________________________________________________________________________
-
-# model 1
-schoen.lsm.test.1 <- do.call(rbind, 
-                             lapply(split(fates.1, fates.1$study.week), 
-                                    schoen_resid_lsm,
-                                    response = "y.mort.scen1",
-                                    ci = 0.90,
-                                    scenario = 1))
-
-# model 2
-schoen.lsm.test.2 <- do.call(rbind, 
-                             lapply(split(fates.1, fates.1$study.week), 
-                                    schoen_resid_lsm,
-                                    response = "y.mort.scen2",
-                                    ci = 0.90,
-                                    scenario = 2))
-
-# model 3
-schoen.lsm.test.3 <- do.call(rbind, 
-                             lapply(split(fates.1, fates.1$study.week), 
-                                    schoen_resid_lsm,
-                                    response = "y.mort.scen3",
-                                    ci = 0.90,
-                                    scenario = 3))
-
-# plot test
-ggplot(data = schoen.lsm.test.3) +
-  
-  theme_bw() +
-  
-  facet_wrap(~ ls) +
-  
-  geom_point(aes(x = study.week,
-                 y = med)) +
+                 y = med),
+             shape = 21,
+             size = 0.7,
+             fill=  "white") +
   
   geom_hline(yintercept = 0,
              linetype = "dashed") +
   
   geom_smooth(aes(x = study.week,
                   y = med),
-              method = "gam",
-              se = T)
+              method = "loess",
+              se = T,
+              color = "aquamarine4",
+              fill = "aquamarine4") +
+  
+  theme(panel.grid = element_blank(),
+        axis.text = element_text(color = "black"),
+        strip.text = element_text(hjust = 0),
+        strip.background = element_blank()) +
+  
+  xlab("Study week") +
+  ylab("Scaled Schoenfeld residual")
 
-# exactly what I hoped to see!
+# 667 x 470
+
+#_______________________________________________________________________________________________
+# 6c. Landscape ----
+#_______________________________________________________________________________________________
+
+# bind together
+schoen.lsm.all <- rbind(schoen.lsm.1 %>% mutate(scen = "Scenario 1"),
+                        schoen.lsm.2 %>% mutate(scen = "Scenario 2"),
+                        schoen.lsm.3 %>% mutate(scen = "Scenario 3"))
+
+
+# plot
+ggplot(data = schoen.lsm.all) +
+  
+  theme_bw() +
+  
+  facet_grid(ls ~ scen) +
+  
+  geom_errorbar(aes(x = study.week,
+                    y = med,
+                    ymin = l.ci,
+                    ymax = u.ci),
+                width = 0,
+                color = "gray75") +
+  
+  geom_point(aes(x = study.week,
+                 y = med),
+             shape = 21,
+             size = 0.7,
+             fill=  "white") +
+  
+  geom_hline(yintercept = 0,
+             linetype = "dashed") +
+  
+  geom_smooth(aes(x = study.week,
+                  y = med),
+              method = "loess",
+              se = T,
+              color = "aquamarine4",
+              fill = "aquamarine4") +
+  
+  theme(panel.grid = element_blank(),
+        axis.text = element_text(color = "black"),
+        strip.text = element_text(hjust = 0),
+        strip.background = element_blank()) +
+  
+  xlab("Study week") +
+  ylab("Scaled Schoenfeld residual")
+
+# 667 x 470

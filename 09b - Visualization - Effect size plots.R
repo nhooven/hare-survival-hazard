@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2025 
 # Date completed: 01 Dec 2025
-# Date last modified: 02 Mar 2026
+# Date last modified: 03 Mar 2026
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
@@ -224,9 +224,12 @@ out.plot <- ggplot() +
   
   # remove gridlines, remove legend
   theme(panel.grid = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(color = "black"),
         legend.position = c(0.75, 0.8),
         legend.title = element_blank(),
         axis.text = element_text(color = "black"),
+        axis.ticks.y = element_blank(),
         axis.title.y = element_blank(),
         strip.background = element_blank())
     
@@ -307,6 +310,8 @@ ggplot() +
   
   # remove gridlines, remove legend
   theme(panel.grid = element_blank(),
+        panel.border = element_blank(),
+        axis.line = element_line(color = "black"),
         legend.position = c(0.75, 0.8),
         legend.title = element_text(),
         axis.text = element_text(color = "black"),
