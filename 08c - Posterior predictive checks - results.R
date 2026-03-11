@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 27 Feb 2026 
 # Date completed: 02 Mar 2026 
-# Date last modified: 02 Mar 2026 
+# Date last modified: 11 Mar 2026 
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
@@ -220,7 +220,10 @@ fates.1 <- fates %>%
     
     by = c("year", "week")
     
-  ) %>%
+  )
+
+
+%>%
   
   # standardize BCI.1
   mutate(BCI.s = (BCI.1 - mean(BCI.1)) / sd(BCI.1),
