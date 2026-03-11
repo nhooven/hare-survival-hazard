@@ -18,7 +18,7 @@ library(tidyverse)       # manipulate and clean data
 # 2. Read in and prepare data ----
 #_______________________________________________________________________________________________
 
-fates <- read.csv("Cleaned data/fates_final_cleaned_2.csv")
+fates <- read.csv("Cleaned data/fates_final_cleaned.csv")
 
 # subset to those observations we'll fit the model to
 fates.1 <- fates %>% 
@@ -245,8 +245,6 @@ fates.new.3 <- fates.new.2 %>%
     study.week,
     Sex.1,
     Collar.type.1,
-    BCI.1,
-    BCI.2,
     p.dm,
     p.o,
     p.js,

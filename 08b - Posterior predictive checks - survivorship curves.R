@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 27 Feb 2026 
+# Date last modified: 11 Mar 2026 
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
@@ -38,6 +38,10 @@ fates <- read.csv("Cleaned data/fates_forModel.csv")
 
 # previous dataset because it has the year variable
 fates.year <- read.csv("Cleaned data/fates_final_cleaned_2.csv")
+
+# BCI by deployment
+fates.deploy <- readRDS("Cleaned data/fates_deploy.rds")
+fates.deploy.df <- fates.deploy$fates.deploy
 
 # day lookup table
 day.lookup <- read.csv("Cleaned data/day_lookup.csv")
@@ -82,9 +86,16 @@ fates.1 <- fates %>%
     
   ) %>%
   
-  # standardize BCI.1
-  mutate(BCI.s = (BCI.1 - mean(BCI.1)) / sd(BCI.1),
-         study.week.s = (study.week - mean(study.week)) / sd(study.week),
+  # join in BCI data
+  left_join(fates.deploy.df %>% dplyr::select(deployment.1, BCI)) %>%
+  
+  # impute mean BCI 
+  mutate(BCI = ifelse(is.na(BCI) == T,
+                      fates.deploy$bci.mean,
+                      BCI)) %>%
+  
+  # standardize variables
+  mutate(BCI.s = (BCI - fates.deploy$bci.mean) / fates.deploy$bci.sd,
          p.dm.s = (p.dm - mean(p.dm)) / sd(p.dm),
          p.open.s = (p.o - mean(p.o)) / sd(p.o))
 
@@ -500,14 +511,15 @@ sim_lifetime <- function (x) {
 
     
     # total hazard ratio prediction
-    hr = exp(log(y$hr_bci) * x$BCI.s +
-             log(y$hr_bci_study_week) * x$study.week.s * x$BCI.s +
-             log(y$hr_dm) * x$p.dm.s +
-             log(y$hr_open) * x$p.open.s +
-             log(y$hr_pil_total1) * x$post1 * x$pil +
-             log(y$hr_pil_total2) * x$post2 * x$pil +
-             log(y$hr_ret_total1) * x$post1 * x$ret +
-             log(y$hr_ret_total2) * x$post2 * x$ret)
+    hr = exp(y$b_bci * x$BCI.s +
+             y$b_dm * x$p.dm.s +
+             y$b_open * x$p.open.s +
+             y$b_post1 * x$post1 +
+             y$b_post2 * x$post2 +
+             y$b_ret_post1 * x$ret * x$post1 +
+             y$b_ret_post2 * x$ret * x$post2 +
+             y$b_pil_post1 * x$pil * x$post1 +
+             y$b_pil_post2 * x$pil * x$post2)
     
     # full hazard
     full.haz = blh * hr
@@ -625,7 +637,7 @@ deploy.split <- split(fates.2, fates.2$deployment.1)
 # loop through draws
 S.df.all <- data.frame()
 
-for (i in 1:1) {
+for (i in 1:3000) {
   
   # extract focal iteration
   iter.draw1 <- model.fit.1[i, ]

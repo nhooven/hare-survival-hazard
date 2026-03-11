@@ -5,15 +5,16 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 22 Jan 2026 
 # Date completed: 22 Jan 2026 
-# Date last modified: 26 Feb 2026 
+# Date last modified: 11 Mar 2026 
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
 # 1. Load required packages ----
 #_______________________________________________________________________________________________
 
-library(tidyverse)       # manipulate and clean data
+library(tidyverse)       # manipulateand clean data
 library(MCMCvis)
+library(coda)
 
 #_______________________________________________________________________________________________
 # 2. Read in posterior samples ----
@@ -31,31 +32,31 @@ param.names <- colnames(model.1[[1]])
 #_______________________________________________________________________________________________
 
 # model 1
-MCMCsummary(model.1, params = c("a0s", "a0sc", param.names[c(13:20)]))
+MCMCsummary(model.1, params = c("a0s", "a0sc", param.names[c(13:21)]))
 
 # model 2
-MCMCsummary(model.2, params = c("a0s", "a0sc", param.names[c(13:20)]))
+MCMCsummary(model.2, params = c("a0s", "a0sc", param.names[c(13:21)]))
 
 # model 3
-MCMCsummary(model.3, params = c("a0s", "a0sc", param.names[c(13:20)]))
+MCMCsummary(model.3, params = c("a0s", "a0sc", param.names[c(13:21)]))
 
 #_______________________________________________________________________________________________
-# 4. Traceplots for HRs ----
+# 4. Traceplots for betas ----
 #_______________________________________________________________________________________________
 
 # model 1
-MCMCtrace(model.1, params = c(param.names[c(13:20)]), pdf = F)
+MCMCtrace(model.1, params = c(param.names[c(13:21)]), pdf = F)
 
 # model 2
-MCMCtrace(model.2, params = c(param.names[c(13:20)]), pdf = F)
+MCMCtrace(model.2, params = c(param.names[c(13:21)]), pdf = F)
 
 # model 3
-MCMCtrace(model.3, params = c(param.names[c(13:20)]), pdf = F)
+MCMCtrace(model.3, params = c(param.names[c(13:21)]), pdf = F)
 
 #_______________________________________________________________________________________________
-# 5. Save Rhat and ESS for hazard ratios ----
+# 5. Save Rhat and ESS for betas ----
 #_______________________________________________________________________________________________
 
-write.table(MCMCsummary(model.1, params = c(param.names[c(13:20)])), "clipboard", sep = "\t")
-write.table(MCMCsummary(model.2, params = c(param.names[c(13:20)])), "clipboard", sep = "\t")
-write.table(MCMCsummary(model.3, params = c(param.names[c(13:20)])), "clipboard", sep = "\t")
+write.table(MCMCsummary(model.1, probs = c(0.05, 0.5, 0.95), params = c(param.names[c(13:21)])), "clipboard", sep = "\t")
+write.table(MCMCsummary(model.2, probs = c(0.05, 0.5, 0.95), params = c(param.names[c(13:21)])), "clipboard", sep = "\t")
+write.table(MCMCsummary(model.3, probs = c(0.05, 0.5, 0.95), params = c(param.names[c(13:21)])), "clipboard", sep = "\t")

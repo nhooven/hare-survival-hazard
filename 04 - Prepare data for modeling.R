@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 25 Feb 2026
 # Date completed: 25 Feb 2026
-# Date last modified: 25 Feb 2026
+# Date last modified: 09 Mar 2026
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
@@ -20,6 +20,7 @@ library(mgcv)            # construct basis functions for cyclic splines
 #_______________________________________________________________________________________________
 
 fates <- read.csv("Cleaned data/fates_forModel.csv")
+fates.deploy <- readRDS("Cleaned data/fates_deploy.rds")
 day.lookup <- read.csv("Cleaned data/day_lookup.csv")
 
 #_______________________________________________________________________________________________
@@ -50,7 +51,6 @@ basis <- cSplineDes(fates$week,
 covar.contin <- fates %>%
   
   dplyr::select(study.week,
-                BCI.1,
                 p.dm,
                 p.o)
 
@@ -69,7 +69,6 @@ covar.both <- fates %>%
   bind_cols(covar.contin) %>%
   
   pivot_longer(cols = c(study.week,
-                        BCI.1,
                         p.dm,
                         p.o))
 
@@ -104,9 +103,6 @@ ggplot(covar.both) +
   geom_point(aes(x = as.factor(post2),
                  y = value),
              alpha = 0.5)
-
-# BCI seems to increase a bit during post2
-# could explain the non-proportionality
 
 # ret
 ggplot(covar.both) +
@@ -155,9 +151,14 @@ constant.list = list(
   # indices
   cluster = fates$cluster,
   sex = fates$sex + 1,
+  deployment = fates$deployment.1,
   
   # spline
-  basis = basis
+  basis = basis,
+  
+  # BCI imputation
+  bci.mean = fates.deploy$bci.mean,
+  bci.sd = fates.deploy$bci.sd
   
 )
 
@@ -173,10 +174,7 @@ data.list <- list(
   y_mort_2 = fates$y.mort.scen2,
   y_mort_3 = fates$y.mort.scen3,
   
-  # covariates
-  # intrinsic
-  bci_1 = (fates$BCI.1 - mean(fates$BCI.1)) / sd(fates$BCI.1),   # standardized (center + scale)
-  
+  # individual-week covariates
   # treatment
   post1 = fates$post1,
   post2 = fates$post2,
@@ -188,7 +186,13 @@ data.list <- list(
   
   # landscape
   dm = (fates$p.dm - mean(fates$p.dm)) / sd(fates$p.dm),
-  open = (fates$p.o - mean(fates$p.o)) / sd(fates$p.o)
+  open = (fates$p.o - mean(fates$p.o)) / sd(fates$p.o),
+  
+  # deployment covariates
+  dep.sex = fates.deploy$fates.deploy$Sex.1,
+  hfl = fates.deploy$fates.deploy$HFL,
+  mass = fates.deploy$fates.deploy$Final.mass,
+  bci = fates.deploy$fates.deploy$BCI
   
 )
 
