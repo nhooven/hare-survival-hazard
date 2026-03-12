@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 02 Mar 2026 
-# Date last modified: 11 Mar 2026 
+# Date last modified: 12 Mar 2026 
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
@@ -14,6 +14,7 @@
 
 library(tidyverse)       # manipulate and clean data
 library(mgcv)
+library(bayestestR)      # HDIs
 
 #_______________________________________________________________________________________________
 # 2. Read in and clean data ----
@@ -61,8 +62,8 @@ basis.pred <- cSplineDes(weeks.pred,
 haz_spline <- function (
     
   x,
-  low = 0.025,
-  upp = 0.975
+  low = 0.05,
+  upp = 0.95
   
   ) {
   
@@ -323,14 +324,14 @@ haz_plot <- function (x) {
     scale_x_continuous(breaks = month.cutoffs.some$breaks,
                        labels = month.cutoffs.some$labels) +
     
-    scale_y_continuous(breaks = c(0.04, 0.12, 0.20, 0.28)) +
+    scale_y_continuous(breaks = c(0.04, 0.08, 0.12, 0.16, 0.20, 0.24)) +
     
     # axis labels
     ylab("Baseline hazard") +
     
     # coordinates
     coord_cartesian(xlim = c(3.5, 49.7),
-                    ylim = c(0.009, 0.32)) +
+                    ylim = c(0.009, 0.26)) +
     
     # colors
     scale_color_manual(values = c("#003300", "#669900")) +
@@ -395,14 +396,14 @@ haz_plot_all <- function (x) {
     scale_x_continuous(breaks = month.cutoffs.some$breaks,
                        labels = month.cutoffs.some$labels) +
     
-    scale_y_continuous(breaks = c(0.04, 0.12, 0.20, 0.28)) +
+    scale_y_continuous(breaks = c(0.04, 0.08, 0.12, 0.16, 0.20, 0.24)) +
     
     # axis labels
     ylab("Baseline hazard") +
     
     # coordinates
     coord_cartesian(xlim = c(3.5, 49.7),
-                    ylim = c(0.009, 0.32)) +
+                    ylim = c(0.009, 0.26)) +
     
     scale_color_viridis_d() +
     scale_fill_viridis_d()
@@ -471,7 +472,7 @@ hr_plot <- function (x) {
     scale_y_continuous(breaks = seq(-3, 3, 1)) +
     
     coord_cartesian(xlim = c(3.5, 49.7),
-                    ylim = c(-3.5, 2.65)) +
+                    ylim = c(-3.2, 2.25)) +
     
     # axis labels
     ylab("ln(hazard ratio)") +
