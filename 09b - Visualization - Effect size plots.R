@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2025 
 # Date completed: 01 Dec 2025
-# Date last modified: 11 Mar 2026
+# Date last modified: 29 Apr 2026
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
@@ -216,7 +216,8 @@ plot_by_scen <- function (long.draws, ci) {
     # KDE
     geom_density_ridges(data = long.draws.panel.1,
                         aes(x = value,
-                            y = name),
+                            y = name,
+                            fill = name),
                         color = NA,
                         alpha = 0.5,
                         scale = 0.5,
@@ -226,7 +227,8 @@ plot_by_scen <- function (long.draws, ci) {
     geom_errorbarh(data = ci.panel.1,
                    aes(xmin = lo.2,
                        xmax = up.2,
-                       y = name),
+                       y = name,
+                       color = name),
                    alpha = 0.40,
                    height = 0,
                    linewidth = 1.75,
@@ -235,7 +237,8 @@ plot_by_scen <- function (long.draws, ci) {
     geom_errorbarh(data = ci.panel.1,
                    aes(xmin = lo.1,
                        xmax = up.1,
-                       y = name),
+                       y = name,
+                       color = name),
                    height = 0,
                    linewidth = 1.75,
                    position = position_nudge(y = -0.1)) +
@@ -255,12 +258,17 @@ plot_by_scen <- function (long.draws, ci) {
           panel.border = element_blank(),
           axis.line = element_line(color = "black"),
           legend.title = element_blank(),
+          legend.position = "none",
           axis.text = element_text(color = "black"),
           axis.text.x = element_blank(),
           axis.ticks.y = element_blank(),
           axis.title = element_blank(),
           strip.background = element_blank(),
           plot.margin = margin(0.1, 0.1, 0.1, 0.83, unit = "cm")) +
+    
+    # colors
+    scale_color_manual(values = c("gray45", "olivedrab", "olivedrab")) +
+    scale_fill_manual(values = c("gray45", "olivedrab", "olivedrab")) +
     
     # annotation
     annotate("text", x = 4.3, y = 3.4, label = "a")
@@ -319,7 +327,8 @@ plot_by_scen <- function (long.draws, ci) {
     # KDE
     geom_density_ridges(data = long.draws.panel.2,
                         aes(x = value,
-                            y = name),
+                            y = name,
+                            fill = name),
                         color = NA,
                         alpha = 0.5,
                         scale = 0.5,
@@ -329,7 +338,8 @@ plot_by_scen <- function (long.draws, ci) {
     geom_errorbarh(data = ci.panel.2,
                    aes(xmin = lo.2,
                        xmax = up.2,
-                       y = name),
+                       y = name,
+                       color = name),
                    alpha = 0.40,
                    height = 0,
                    linewidth = 1.75,
@@ -338,10 +348,18 @@ plot_by_scen <- function (long.draws, ci) {
     geom_errorbarh(data = ci.panel.2,
                    aes(xmin = lo.1,
                        xmax = up.1,
-                       y = name),
+                       y = name,
+                       color = name),
                    height = 0,
                    linewidth = 1.75,
                    position = position_nudge(y = -0.1)) +
+    
+    # colors
+    scale_color_manual(values = c("gray45", "firebrick", "firebrick",
+                                  "gray45", "firebrick", "firebrick")) +
+    
+    scale_fill_manual(values = c("gray45", "firebrick", "firebrick",
+                                 "gray45", "firebrick", "firebrick")) +
     
     # x-axis scale
     scale_x_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4)) +
@@ -358,6 +376,7 @@ plot_by_scen <- function (long.draws, ci) {
           panel.border = element_blank(),
           axis.line = element_line(color = "black"),
           legend.title = element_blank(),
+          legend.position = "none",
           axis.text = element_text(color = "black"),
           axis.text.x = element_blank(),
           axis.ticks.y = element_blank(),
@@ -415,6 +434,7 @@ plot_by_scen <- function (long.draws, ci) {
                    aes(xmin = lo.2,
                        xmax = up.2,
                        y = name),
+                   color = "firebrick",
                    alpha = 0.40,
                    height = 0,
                    linewidth = 1.75,
@@ -424,6 +444,7 @@ plot_by_scen <- function (long.draws, ci) {
                    aes(xmin = lo.1,
                        xmax = up.1,
                        y = name),
+                   color = "firebrick",
                    height = 0,
                    linewidth = 1.75,
                    position = position_nudge(y = -0.1)) +
