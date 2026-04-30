@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 11 Mar 2026 
+# Date last modified: 30 Apr 2026 
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
@@ -181,7 +181,16 @@ calc_blh <- function (x) {
     w.by.b.sum <- apply(sweep(basis.pred, 2, w, `*`), 1, sum)
     
     # add to intercept and exponentiate
-    blh = as.numeric(exp(y[paste0("a0sc[", x$sex[1] + 1, ", ", x$cluster[1], "]")] + w.by.b.sum[x$week[1]]))
+    # we only need one - these are all for the same week
+    blh = exp(
+      
+      as.numeric(
+        
+        y[paste0("a0sc[", x$sex[1] + 1, ", ", x$cluster[1], "]")]
+        
+      ) + w.by.b.sum[x$week[1]]
+      
+    )
     
     # return
     return(blh)
@@ -389,6 +398,24 @@ for (i in 1:3000) {
   # bind in both
   discrep.sum.ALL <- rbind(discrep.sum.ALL, discrep.i.j.sum)
   discrep.i.ALL <- rbind(discrep.i.ALL, discrep.i)
+  
+  # timing
+  if (i %% 50 == 0) {
+    
+    diff.time <- difftime(start.time, Sys.time(), units = "mins")
+    
+    print(
+      
+      paste0(
+        
+        "Completed iteration ", i, " of ", 3000, " - ", 
+        round(as.numeric(diff.time), digits = 2), " mins"
+        
+      )
+      
+    )
+    
+  }
   
 } # i
   
