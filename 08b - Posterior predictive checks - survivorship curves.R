@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 11 Mar 2026 
+# Date last modified: 30 Apr 2026 
 # R version: 4.4.3
 
 #_______________________________________________________________________________________________
@@ -204,8 +204,6 @@ kap_mei <- function (
   
 }
 
-# REMOVE FOR KAMIAK!!!
-
 # apply function
 # model 1
 km.df.1 <- kap_mei(fates.2,
@@ -224,59 +222,7 @@ km.df.all <- rbind(km.df.1 %>% mutate(scen = "1"),
                    km.df.2 %>% mutate(scen = "2"),
                    km.df.3 %>% mutate(scen = "3"))
 
-# plot each
-ggplot() +
-  
-  theme_bw() +
-  
-  # scen1
-  geom_ribbon(data = km.df.1,
-              aes(x = t,
-                  y = S,
-                  ymin = ci.low,
-                  ymax = ci.upp),
-              alpha = 0.25,
-              fill = "gray") +
-  
-  geom_line(data = km.df.1,
-            aes(x = t,
-                y = S)) +
-  
-  # scen2
-  geom_ribbon(data = km.df.2,
-              aes(x = t,
-                  y = S,
-                  ymin = ci.low,
-                  ymax = ci.upp),
-              alpha = 0.25,
-              fill = "red") +
-  
-  geom_line(data = km.df.2,
-            aes(x = t,
-                y = S),
-            color = "darkred") +
-  
-  # scen3
-  geom_ribbon(data = km.df.3,
-              aes(x = t,
-                  y = S,
-                  ymin = ci.low,
-                  ymax = ci.upp),
-              alpha = 0.25,
-              fill = "gold") +
-  
-  geom_line(data = km.df.3,
-            aes(x = t,
-                y = S),
-            color = "orange") +
-  
-  theme(panel.grid = element_blank()) +
-  
-  xlab("Weeks since deployment") +
-  
-  ylab("Cumulative survival") +
-  
-  coord_cartesian(ylim = c(0, 1))
+
 
 #_______________________________________________________________________________________________
 # 6. Simulate lifetimes ----
@@ -507,22 +453,33 @@ sim_lifetime <- function (x) {
     w.by.b.sum <- apply(sweep(basis.pred, 2, w, `*`), 1, sum)
     
     # add to intercept and exponentiate
-    blh = as.numeric(exp(y[paste0("a0sc[", x$sex[1] + 1, ", ", x$cluster[1], "]")] + w.by.b.sum[x$week[1]]))
-
+    # importantly, we must preserve the weeks here
+    blh = exp(
+        
+        as.numeric(
+          
+          y[paste0("a0sc[", x$sex[1] + 1, ", ", x$cluster[1], "]")]
+          
+          ) + w.by.b.sum
+        
+        )
+    
+    # assign to x - correctly (why didn't I do this before?)
+    x$blh <- blh[x$week]
     
     # total hazard ratio prediction
-    hr = exp(y$b_bci * x$BCI.s +
-             y$b_dm * x$p.dm.s +
-             y$b_open * x$p.open.s +
-             y$b_post1 * x$post1 +
-             y$b_post2 * x$post2 +
-             y$b_ret_post1 * x$ret * x$post1 +
-             y$b_ret_post2 * x$ret * x$post2 +
-             y$b_pil_post1 * x$pil * x$post1 +
-             y$b_pil_post2 * x$pil * x$post2)
+    x$hr = exp(y$b_bci * x$BCI.s +
+               y$b_dm * x$p.dm.s +
+               y$b_open * x$p.open.s +
+               y$b_post1 * x$post1 +
+               y$b_post2 * x$post2 +
+               y$b_ret_post1 * x$ret * x$post1 +
+               y$b_ret_post2 * x$ret * x$post2 +
+               y$b_pil_post1 * x$pil * x$post1 +
+               y$b_pil_post2 * x$pil * x$post2)
     
     # full hazard
-    full.haz = blh * hr
+    full.haz = x$blh * x$hr
     
     # return
     return(full.haz)
@@ -637,6 +594,8 @@ deploy.split <- split(fates.2, fates.2$deployment.1)
 # loop through draws
 S.df.all <- data.frame()
 
+start.time <- Sys.time()
+
 for (i in 1:3000) {
   
   # extract focal iteration
@@ -664,6 +623,24 @@ for (i in 1:3000) {
   # bind in (forgot this!)
   S.df.all <- rbind(S.df.all, S.df)
   
+  # timing
+  if (i %% 50 == 0) {
+    
+    diff.time <- difftime(Sys.time(), curr.time, units = "mins")
+    
+    print(
+      
+      paste0(
+        
+        "Completed iteration ", i, " of ", 3000, " - ", 
+        round(as.numeric(diff.time), digits = 2), " mins"
+        
+      )
+      
+    )
+    
+  }
+  
 }
   
 #_______________________________________________________________________________________________
@@ -678,8 +655,8 @@ km_pred <- function (x) {
     group_by(scen, t) %>%
     
     mutate(med = median(S),
-           pe.low = quantile(S, prob = 0.025),
-           pe.upp = quantile(S, prob = 0.975)) %>%
+           pe.low = quantile(S, prob = 0.05),
+           pe.upp = quantile(S, prob = 0.95)) %>%
     
     slice(1) %>%
     
@@ -691,7 +668,7 @@ km_pred <- function (x) {
   
 }
 
-km.ppc <- km_pred(S.df)  
+km.ppc <- km_pred(S.df.all)  
 
 #_______________________________________________________________________________________________
 # 8c. Plot with empirical curve ----
@@ -707,7 +684,8 @@ km_theme <- function () {
     theme(panel.grid = element_blank(),
           axis.text = element_text(color = "black"),
           strip.text = element_text(hjust = 0),
-          strip.background = element_rect(fill = "white"))
+          strip.background = element_rect(fill = "gray90",
+                                          color = NA))
   
 }
 
