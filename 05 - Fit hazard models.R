@@ -5,23 +5,23 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 25 Nov 2025
-# Date last modified: 26 Feb 2026 
+# Date last modified: 01 May 2026 
 # R version: 4.4.3
 
-#_______________________________________________________________________________________________
+#_______________________________________________________________________________
 # 1. Load required packages ----
-#_______________________________________________________________________________________________
+#_______________________________________________________________________________
 
 library(nimble)          # modeling with nimble
 library(nimbleHMC)       # HMC in nimble
 library(coda)            # model outputs
 
-#_______________________________________________________________________________________________
+#_______________________________________________________________________________
 # 2. Read in data ----
-#_______________________________________________________________________________________________
+#_______________________________________________________________________________
 
-constant.list <- readRDS("Cleaned data/constants.rds")
-data.list <- readRDS("Cleaned data/data.rds")
+constant.list <- readRDS("data_cleaned/constants.rds")
+data.list <- readRDS("data_cleaned/data.rds")
 
 # clone data.lists with different y to avoid having to write three identical models
 data.list.1 <- data.list
@@ -32,9 +32,9 @@ data.list.1$y <- data.list$y_mort_1
 data.list.2$y <- data.list$y_mort_2
 data.list.3$y <- data.list$y_mort_3
 
-#_______________________________________________________________________________________________
+#_______________________________________________________________________________
 # 3. Model code ----
-#_______________________________________________________________________________________________
+#_______________________________________________________________________________
 
 model.code <- nimbleCode({
   
@@ -56,22 +56,52 @@ model.code <- nimbleCode({
   # intrinsic 
   b_bci ~ dt(0, sigma = 2.5, df = 1)
   
-  # intrinsic / extrinsic interactions
-  b_bci_study_week ~ dt(0, sigma = 2.5, df = 1)
-  
   # landscape
   b_dm ~ dt(0, sigma = 2.5, df = 1)
   b_open ~ dt(0, sigma = 2.5, df = 1)
   
-  # treatment variables
-  b_ret ~ dt(0, sigma = 2.5, df = 1)
-  b_pil ~ dt(0, sigma = 2.5, df = 1)
+  # year main effects
+  b_post1 ~ dt(0, sigma = 2.5, df = 1)
+  b_post2 ~ dt(0, sigma = 2.5, df = 1)
   
-  # pre-post treatment interaction variables
+  # pre-post treatment interactive effects
   b_ret_post1 ~ dt(0, sigma = 2.5, df = 1)
   b_ret_post2 ~ dt(0, sigma = 2.5, df = 1)
   b_pil_post1 ~ dt(0, sigma = 2.5, df = 1)
   b_pil_post2 ~ dt(0, sigma = 2.5, df = 1)
+  
+  # BCI imputation
+  # priors
+  # mean
+  hfl0 ~ dunif(log(11), log(14))
+  mass0 ~ dunif(log(0.8), log(1.1))
+  
+  # SD
+  hfl_sd ~ dexp(rate = 1)
+  mass_sd ~ dexp(rate = 1)
+  
+  # sex effect on HFL and mass
+  bh ~ dnorm(0, sd = 1)
+  bm ~ dnorm(0, sd = 1)
+  
+  # impute for each deployment (n = 383), as necessary
+  for (i in 1:383) {
+    
+    # latent hfl and mass 
+    log(hfl_mu[i]) <- hfl0 + bh * dep.sex[i]
+    log(mass_mu[i]) <- mass0 + bm * dep.sex[i]
+    
+    # HFL and mass follow normals
+    hfl[i] ~ dnorm(hfl_mu[i], sd = hfl_sd)
+    mass[i] ~ dnorm(mass_mu[i], sd = mass_sd)
+    
+    # calculation for all latent BCI
+    bci[i] <- (mass[i] * 1000) / (hfl[i] * 10)
+    
+    # standardize for model
+    bci.s[i] <- (bci[i] - bci.mean) / bci.sd
+    
+  } # deployment
   
   # random spline parameters - cluster (c) nested within sex (s)
   for (s in 1:2) {
@@ -133,16 +163,22 @@ model.code <- nimbleCode({
         # covariate effects
         exp(
           
-          b_bci * bci_1[i] +
-          b_bci_study_week * bci_1[i] * study_week[i] +
-          b_ret * ret[i] + 
-          b_ret_post1 * post1[i] * ret[i] +
-          b_ret_post2 * post2[i] * ret[i] +
-          b_pil * pil[i] + 
-          b_pil_post1 * post1[i] * pil[i] +
-          b_pil_post2 * post2[i] * pil[i] +
+          # BCI - by deployment
+          b_bci * bci.s[deployment[i]] + 
+            
+          # landscape
           b_dm * dm[i] +
-          b_open * open[i]
+          b_open * open[i] +
+            
+          # year main effects
+          b_post1 * post1[i] + 
+          b_post2 * post2[i] + 
+            
+          # treatment x year interactive effects
+          b_ret_post1 * ret[i] * post1[i] +
+          b_ret_post2 * ret[i] * post2[i] +
+          b_pil_post1 * pil[i] * post1[i] +
+          b_pil_post2 * pil[i] * post2[i]
           
         )
       
@@ -150,16 +186,6 @@ model.code <- nimbleCode({
     
   } # N
   
-  # derived quantities (hazard ratios)
-  hr_bci <- exp(b_bci)
-  hr_bci_study_week <- exp(b_bci_study_week)
-  hr_ret_total1 <- exp(b_ret + b_ret_post1)
-  hr_ret_total2 <- exp(b_ret + b_ret_post2)
-  hr_pil_total1 <- exp(b_pil + b_pil_post1)
-  hr_pil_total2 <- exp(b_pil + b_pil_post2)
-  hr_dm <- exp(b_dm)
-  hr_open <- exp(b_open)
-    
 })
 
 # ______________________________________________________________________________
@@ -179,15 +205,20 @@ inits <- list(
   
   # lambda - smoothing penalty (log scale)
   loglam_mean = rnorm(1, 0, sd = 1),
-  loglam_sigma = rexp(1, rate = 2),       
+  loglam_sigma = rexp(1, rate = 2),    
+  
+  # BCI imputation
+  bh = rnorm(1, 0, 1),
+  bm = rnorm(1, 0, 1),
+  hfl = ifelse(is.na(data.list$hfl) == F, NA, 13),
+  mass = ifelse(is.na(data.list$mass) == F, NA, 1.0),
   
   # coefficients (Cauchy priors)
   b_bci = rnorm(1, 0, 2.5),
-  b_bci_study_week = rnorm(1, 0, 2.5),
   b_dm = rnorm(1, 0, 2.5),
   b_open = rnorm(1, 0, 2.5),
-  b_ret = rnorm(1, 0, 2.5),
-  b_pil = rnorm(1, 0, 2.5),
+  b_post1 = rnorm(1, 0, 2.5),
+  b_post2 = rnorm(1, 0, 2.5),
   b_ret_post1 = rnorm(1, 0, 2.5),
   b_ret_post2 = rnorm(1, 0, 2.5),
   b_pil_post1 = rnorm(1, 0, 2.5),
@@ -197,12 +228,12 @@ inits <- list(
   # sex
   a0s_z = rnorm(2, 0, sd = 1),
   lams_z = rnorm(2, 0, sd = 1),
-    
+  
   # sex x basis [2, nbasis]
   ws_z = matrix(rnorm(2 * constant.list$nbasis, 0, 1),
                 nrow = 2,
                 ncol = constant.list$nbasis),
-
+  
   # sex / cluster [2, 4]
   a0sc = matrix(rnorm(2 * 4, 0, sd = 1),
                 nrow = 2,
@@ -235,17 +266,18 @@ monitor <- c(
   "a0sc",
   "wsc",
   
-  # hazard ratios
-  "hr_bci",
-  "hr_bci_study_week",
-  "hr_ret_total1", 
-  "hr_ret_total2",
-  "hr_pil_total1",
-  "hr_pil_total2",
-  "hr_dm",
-  "hr_open"
+  # coefficients
+  "b_bci",
+  "b_dm",
+  "b_open",
+  "b_post1",
+  "b_post2",
+  "b_ret_post1", 
+  "b_ret_post2",
+  "b_pil_post1",
+  "b_pil_post2"
   
-  )
+)
 
 # ______________________________________________________________________________
 # 6. Set up models ----
@@ -358,6 +390,6 @@ model.3.run <- runMCMC(
 # 11. Save samples ----
 # ______________________________________________________________________________
 
-saveRDS(model.1.run, "Model outputs/model_1.rds")
-saveRDS(model.2.run, "Model outputs/model_2.rds")
-saveRDS(model.3.run, "Model outputs/model_3.rds")
+saveRDS(model.1.run, "models/model_1.rds")
+saveRDS(model.2.run, "models/model_2.rds")
+saveRDS(model.3.run, "models/model_3.rds")

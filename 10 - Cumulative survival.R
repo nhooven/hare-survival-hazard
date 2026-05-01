@@ -31,16 +31,16 @@ library(bayestestR)      # HDIs
 #_______________________________________________________________________________
 
 # model samples
-model.fit.2 <- readRDS("Model outputs/model_2.rds")
+model.fit.2 <- readRDS("models/model_2.rds")
 
 # dataset
-fates <- read.csv("Cleaned data/fates_forModel.csv")
+fates <- read.csv("data_cleaned/fates_forModel.csv")
 
 # previous dataset because it has the year variable
-fates.year <- read.csv("Cleaned data/fates_final_cleaned_2.csv")
+fates.year <- read.csv("data_cleaned/fates_final_cleaned_2.csv")
 
 # day lookup table
-day.lookup <- read.csv("Cleaned data/day_lookup.csv")
+day.lookup <- read.csv("data_cleaned/day_lookup.csv")
 
 #_______________________________________________________________________________
 # 3. Initialize data ----
