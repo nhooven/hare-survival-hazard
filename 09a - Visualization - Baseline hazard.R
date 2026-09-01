@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 02 Mar 2026 
-# Date last modified: 01 May 2026 
+# Date last modified: 01 Sep 2026 
 # R version: 4.4.3
 
 #_______________________________________________________________________________
@@ -343,6 +343,12 @@ haz_plot <- function (x) {
 haz_plot(spline.forPlot.mod2)
 
 # 600 x 320
+ggsave("final_plots/Figure_6.pdf",
+       device = "pdf",
+       width = 600,
+       height = 320,
+       scale = 3.5,
+       units = "px")
 
 #_______________________________________________________________________________
 # 5b. Expected hazard across the annual cycle, all models ----

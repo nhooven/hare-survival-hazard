@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2025 
 # Date completed: 01 Dec 2025
-# Date last modified: 01 May 2026
+# Date last modified: 01 Sep 2026
 # R version: 4.4.3
 
 #_______________________________________________________________________________
@@ -498,6 +498,14 @@ plot_by_scen <- function (long.draws, ci) {
 
 (hr.scen1 <- plot_by_scen(long.draws.1, all.ci.1))
 (hr.scen2 <- plot_by_scen(long.draws.2, all.ci.2))
+
+ggsave("final_plots/Figure_7.pdf",
+       device = "pdf",
+       width = 341,
+       height = 502,
+       scale = 3.5,
+       units = "px")
+
 (hr.scen3 <- plot_by_scen(long.draws.3, all.ci.3))
 
 #_______________________________________________________________________________
