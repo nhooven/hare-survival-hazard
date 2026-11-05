@@ -37,8 +37,6 @@ library(mgcv)
 
 # model samples
 model.fit.1 <- readRDS("models/model_1.rds")
-model.fit.2 <- readRDS("models/model_2.rds")
-model.fit.3 <- readRDS("models/model_3.rds")
 
 # dataset
 fates <- read.csv("data_cleaned/fates_forModel.csv")
@@ -60,8 +58,6 @@ day.lookup <- read.csv("data_cleaned/day_lookup.csv")
 #_______________________________________________________________________________
 
 model.fit.1 <- as.data.frame(do.call(rbind, model.fit.1))
-model.fit.2 <- as.data.frame(do.call(rbind, model.fit.2))
-model.fit.3 <- as.data.frame(do.call(rbind, model.fit.3))
 
 #_______________________________________________________________________________
 # 3b. Attribute study-week to fates df ----
@@ -110,22 +106,29 @@ fates.1 <- fates %>%
 # 3c. Spline for prediction ----
 #_______________________________________________________________________________
 
-# define knots (quantile)
+# define knots
 n.knots <- 9 + 1
 
-knot.list <- quantile(fates$week, 
-                      probs = seq(from = 0, 
-                                  to = 1, 
-                                  length.out = n.knots))
+# construct raw smooth (SAME as model fit)
+smooth.raw <- smoothCon(s(week,
+                          bs = "cp",        # cyclic penalized - what I really want
+                          k = n.knots),
+                        data = fates.1,
+                        absorb.cons = T)    # identifiability constraint
 
 # weeks to predict on
-weeks.pred <- 1:52
+pred.df <- data.frame(week = 1:52)
 
-# first, we need to create the "normal" scale predictions
-# let's create a prediction df first
-basis.pred <- cSplineDes(weeks.pred,
-                         knots = knot.list,
-                         ord = 4)
+# smooth2random
+smooth.rand <- smooth2random(smooth.raw[[1]], 
+                             vnames = "",
+                             type = 2) # fixed and random
+
+# new predict grid
+smooth.pred <- PredictMat(smooth.raw[[1]], pred.df)
+
+# new basis, correctly rotated
+basis.pred <- smooth.pred %*% smooth.rand$trans.U %*% diag(smooth.rand$trans.D)
 
 #_______________________________________________________________________________
 # 4. Split dataset by study.week ----
@@ -140,7 +143,7 @@ fates.1.split <- split(fates.1, fates.1$study.week)
 #_______________________________________________________________________________
 
 # calculate baseline hazard
-# we'll stratify individuals by their sex-ft instead of calculating this separately
+# we'll stratify individuals by their sex-cluster instead of calculating this separately
 calc_blh <- function (x) {
   
   # x is a collection of individuals subject to the same BLH
@@ -198,9 +201,7 @@ calc_blh <- function (x) {
   }
   
   # add to x
-  x$blh.1 <- calc_spline_pred(x, iter.draw1)
-  x$blh.2 <- calc_spline_pred(x, iter.draw2)
-  x$blh.3 <- calc_spline_pred(x, iter.draw3)
+  x$blh <- calc_spline_pred(x, iter.draw1)
   
   # return x
   return(x)
@@ -212,11 +213,12 @@ calc_haz <- function (x) {
   
   # x is each deployment from the focal.week
   # function to to take model draws and calculate full hazard
-  calc_haz_1 <- function(x, y, blh = "blh.1") {
+  calc_haz_1 <- function(x, y) {
     
     # y is the focal iteration
     # total hazard ratio prediction
     hr.pred = exp(y$b_bci * x$BCI.s +
+                  y$b_col * x$collar +
                   y$b_dm * x$p.dm.s +
                   y$b_open * x$p.open.s +
                   y$b_post1 * x$post1 +
@@ -227,16 +229,14 @@ calc_haz <- function (x) {
                   y$b_pil_post2 * x$pil * x$post2)
     
     # full hazard
-    full.haz = x[ , blh] * hr.pred
+    full.haz = x$blh * hr.pred
     
     # return
     return(full.haz)
     
   }
   
-  x$haz.1 <- calc_haz_1(x, iter.draw1, "blh.1")
-  x$haz.2 <- calc_haz_1(x, iter.draw2, "blh.2")
-  x$haz.3 <- calc_haz_1(x, iter.draw3, "blh.3")
+  x$haz <- calc_haz_1(x, iter.draw1)
   
   # return
   return(x)
@@ -250,36 +250,23 @@ e_sim_morts <- function (x) {
   x.1 <- x %>%
     
     # keep only columns we need
-    dplyr::select(y.mort.scen1, y.mort.scen2, y.mort.scen3,
-                  haz.1, haz.2, haz.3) %>%
+    dplyr::select(y.mort1, haz) %>%
     
     # take Poisson draws using each hazard
     # must take the correct number of draws so our discrepancy doesn't explode!
-    mutate(
-      
-      pois.draw.1 = ifelse(rpois(n(), haz.1) > 0, 1, 0),
-      pois.draw.2 = ifelse(rpois(n(), haz.2) > 0, 1, 0),
-      pois.draw.3 = ifelse(rpois(n(), haz.3) > 0, 1, 0)
-      
-    ) %>%
+    mutate(pois.draw = ifelse(rpois(n(), haz) > 0, 1, 0)) %>%
     
     # summarize
     summarize(
       
       # expected mort frequencies (sum the hazards)
-      e.mort.1 = sum(haz.1),
-      e.mort.2 = sum(haz.2),
-      e.mort.3 = sum(haz.3),
+      e.mort = sum(haz),
       
       # observed mort frequencies
-      o.mort.1 = sum(y.mort.scen1),
-      o.mort.2 = sum(y.mort.scen2),
-      o.mort.3 = sum(y.mort.scen3),
+      o.mort = sum(y.mort1),
       
       # simulated mort frequencies
-      s.mort.1 = sum(pois.draw.1),
-      s.mort.2 = sum(pois.draw.2),
-      s.mort.3 = sum(pois.draw.3)
+      s.mort = sum(pois.draw)
       
     ) %>%
     
@@ -288,19 +275,15 @@ e_sim_morts <- function (x) {
     mutate(
       
       # simulated
-      discrep.sim.1 = ((s.mort.1 - e.mort.1)^2) / e.mort.1,
-      discrep.sim.2 = ((s.mort.2 - e.mort.2)^2) / e.mort.2,
-      discrep.sim.3 = ((s.mort.3 - e.mort.3)^2) / e.mort.3,
+      discrep.sim = ((s.mort - e.mort)^2) / e.mort,
       
       # observed
-      discrep.obs.1 = ((o.mort.1 - e.mort.1)^2) / e.mort.1,
-      discrep.obs.2 = ((o.mort.2 - e.mort.2)^2) / e.mort.2,
-      discrep.obs.3 = ((o.mort.3 - e.mort.3)^2) / e.mort.3
+      discrep.obs = ((o.mort - e.mort)^2) / e.mort,
       
     ) %>%
     
     # keep only the discrep columns
-    dplyr::select(discrep.sim.1:discrep.obs.3)
+    dplyr::select(discrep.sim, discrep.obs)
   
   # return
   return(x.1)
@@ -315,12 +298,12 @@ e_sim_morts <- function (x) {
 discrep.sum.ALL <- data.frame()
 discrep.i.ALL <- data.frame()
   
+start.time <- Sys.time()
+
 for (i in 1:3000) {
   
   # extract focal iteration
   iter.draw1 <- model.fit.1[i, ]
-  iter.draw2 <- model.fit.2[i, ]
-  iter.draw3 <- model.fit.3[i, ]
   
   # loop through study.weeks
   discrep.i.j <- data.frame()
@@ -362,18 +345,13 @@ for (i in 1:3000) {
     
     summarize(
       
-      discrep.sim.1.sum = sum(discrep.sim.1),
-      discrep.sim.2.sum = sum(discrep.sim.2),
-      discrep.sim.3.sum = sum(discrep.sim.3),
-      discrep.obs.1.sum = sum(discrep.obs.1),
-      discrep.obs.2.sum = sum(discrep.obs.2),
-      discrep.obs.3.sum = sum(discrep.obs.3)
+      discrep.sim.sum = sum(discrep.sim),
+      discrep.obs.sum = sum(discrep.obs)
       
       ) %>%
     
     # keep only the sum columns
-    dplyr::select(discrep.sim.1.sum, discrep.sim.2.sum, discrep.sim.3.sum,
-                  discrep.obs.1.sum, discrep.obs.2.sum, discrep.obs.3.sum) %>%
+    dplyr::select(discrep.sim.sum, discrep.obs.sum) %>%
     
     # and add an index for i
     mutate(i = i)
@@ -383,14 +361,12 @@ for (i in 1:3000) {
   
     mutate(
       
-      Dsim.Dobs.1 = discrep.sim.1.sum > discrep.obs.1.sum,
-      Dsim.Dobs.2 = discrep.sim.2.sum > discrep.obs.2.sum,
-      Dsim.Dobs.3 = discrep.sim.3.sum > discrep.obs.3.sum
+      Dsim.Dobs = discrep.sim.sum > discrep.obs.sum
       
     ) %>%
     
     # keep only the Dsim > Dobs columns
-    dplyr::select(Dsim.Dobs.1, Dsim.Dobs.2, Dsim.Dobs.3) %>%
+    dplyr::select(Dsim.Dobs) %>%
     
     # and add an index for i
     mutate(i = i)
@@ -418,21 +394,16 @@ for (i in 1:3000) {
   }
   
 } # i
-  
 
-    
 discrep.sum.ALL  # summed discrepancy values (for plotting)
 discrep.i.ALL     # for Bayesian p-value
-
 
 #_______________________________________________________________________________
 # 6. Calculate Bayesian p-values ----
 #_______________________________________________________________________________
 
-(bayes.p <- discrep.all.i %>%
+(bayes.p <- discrep.i.ALL %>%
   
-  summarize(scen1 = sum(Dsim.Dobs.1) / n(),
-            scen2 = sum(Dsim.Dobs.2) / n(),
-            scen3 = sum(Dsim.Dobs.3) / n())
+  summarize(mod1 = sum(Dsim.Dobs) / n())
 
 )

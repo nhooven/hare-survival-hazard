@@ -5,8 +5,8 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 01 May 2026 
-# R version: 4.4.3
+# Date last modified: 05 Nov 2026 
+# R version: 4.5.2
 
 #_______________________________________________________________________________
 # 0. Explanation ----
@@ -30,8 +30,6 @@ library(mgcv)
 
 # model samples
 model.fit.1 <- readRDS("models/model_1.rds")
-model.fit.2 <- readRDS("models/model_2.rds")
-model.fit.3 <- readRDS("models/model_3.rds")
 
 # dataset
 fates <- read.csv("data_cleaned/fates_forModel.csv")
@@ -44,7 +42,7 @@ fates.deploy <- readRDS("data_cleaned/fates_deploy.rds")
 fates.deploy.df <- fates.deploy$fates.deploy
 
 # day lookup table
-day.lookup <- read.csv("Cleaned data/day_lookup.csv")
+day.lookup <- read.csv("data_cleaned/day_lookup.csv")
 
 #_______________________________________________________________________________
 # 3. Prepare data ----
@@ -53,8 +51,6 @@ day.lookup <- read.csv("Cleaned data/day_lookup.csv")
 #_______________________________________________________________________________
 
 model.fit.1 <- as.data.frame(do.call(rbind, model.fit.1))
-model.fit.2 <- as.data.frame(do.call(rbind, model.fit.2))
-model.fit.3 <- as.data.frame(do.call(rbind, model.fit.3))
 
 #_______________________________________________________________________________
 # 3b. Attribute study-week to fates df ----
@@ -103,22 +99,29 @@ fates.1 <- fates %>%
 # 3c. Spline for prediction ----
 #_______________________________________________________________________________
 
-# define knots (quantile)
+# define knots
 n.knots <- 9 + 1
 
-knot.list <- quantile(fates$week, 
-                      probs = seq(from = 0, 
-                                  to = 1, 
-                                  length.out = n.knots))
+# construct raw smooth (SAME as model fit)
+smooth.raw <- smoothCon(s(week,
+                          bs = "cp",        # cyclic penalized - what I really want
+                          k = n.knots),
+                        data = fates.1,
+                        absorb.cons = T)    # identifiability constraint
 
 # weeks to predict on
-weeks.pred <- 1:52
+pred.df <- data.frame(week = 1:52)
 
-# first, we need to create the "normal" scale predictions
-# let's create a prediction df first
-basis.pred <- cSplineDes(weeks.pred,
-                         knots = knot.list,
-                         ord = 4)
+# smooth2random
+smooth.rand <- smooth2random(smooth.raw[[1]], 
+                             vnames = "",
+                             type = 2) # fixed and random
+
+# new predict grid
+smooth.pred <- PredictMat(smooth.raw[[1]], pred.df)
+
+# new basis, correctly rotated
+basis.pred <- smooth.pred %*% smooth.rand$trans.U %*% diag(smooth.rand$trans.D)
 
 #_______________________________________________________________________________
 # 4. Split dataset by deployment ----
@@ -157,12 +160,7 @@ fates.2 <- do.call(rbind, lapply(fates.1.deploy.split, add_t))
 
 #_______________________________________________________________________________
 
-kap_mei <- function (
-    
-  x,
-  response = "y.mort.scen1"
-  
-) {
+kap_mei <- function (x) {
   
   # loop through all follow-up times
   all.S <- vector(length = max(x$t))
@@ -181,7 +179,7 @@ kap_mei <- function (
     indivs.i <- x[x$t == i, ]
     
     # calculate survival at interval
-    s.i[i] = 1 - (sum(indivs.i[[response]]) / nrow(indivs.i))
+    s.i[i] = 1 - (sum(indivs.i$y.mort1) / nrow(indivs.i))
     
     # cumulative survival at interval
     all.S[i] = prod(s.i[1:i])
@@ -206,21 +204,8 @@ kap_mei <- function (
 
 # apply function
 # model 1
-km.df.1 <- kap_mei(fates.2,
-                   response = "y.mort.scen1")
+km.df.1 <- kap_mei(fates.2)
 
-# model 2
-km.df.2 <- kap_mei(fates.2,
-                   response = "y.mort.scen2")
-
-# model 3
-km.df.3 <- kap_mei(fates.2,
-                   response = "y.mort.scen3")
-
-# bind together
-km.df.all <- rbind(km.df.1 %>% mutate(scen = "1"),
-                   km.df.2 %>% mutate(scen = "2"),
-                   km.df.3 %>% mutate(scen = "3"))
 
 #_______________________________________________________________________________
 # 6. Simulate lifetimes ----
@@ -244,7 +229,7 @@ expand_time <- function (x, max.t = 150) {
   # keep only one row
   x.1 <- x %>%
     
-    dplyr::select(deployment.1, cluster, site, sex, p.dm.s, p.open.s, BCI.s, study.week) %>%
+    dplyr::select(deployment.1, cluster, site, sex, collar, p.dm.s, p.open.s, BCI.s, study.week) %>%
     
     slice(1) %>%
     
@@ -313,6 +298,7 @@ expand_time <- function (x, max.t = 150) {
       Site = x.1$Site,
       cluster = x.1$cluster,
       sex = x.1$sex,
+      collar = x.1$collar,
       BCI.s = x.1$BCI.s,
       p.dm.s = x.1$p.dm.s,
       p.open.s = x.1$p.open.s,
@@ -467,6 +453,7 @@ sim_lifetime <- function (x) {
     
     # total hazard ratio prediction
     x$hr = exp(y$b_bci * x$BCI.s +
+               y$b_col * x$collar +
                y$b_dm * x$p.dm.s +
                y$b_open * x$p.open.s +
                y$b_post1 * x$post1 +
@@ -485,9 +472,7 @@ sim_lifetime <- function (x) {
   }
   
   # add to x
-  x$haz.1 <- calc_spline_pred(x, iter.draw1)
-  x$haz.2 <- calc_spline_pred(x, iter.draw2)
-  x$haz.3 <- calc_spline_pred(x, iter.draw3)
+  x$haz <- calc_spline_pred(x, iter.draw1)
   
   # 2. simulate draws
   draw_pois <- function (x) {
@@ -496,9 +481,7 @@ sim_lifetime <- function (x) {
       
       mutate(
         
-        draw.1 = rpois(n(), haz.1),
-        draw.2 = rpois(n(), haz.2),
-        draw.3 = rpois(n(), haz.3)
+        draw = rpois(n(), haz)
         
       )
     
@@ -513,26 +496,10 @@ sim_lifetime <- function (x) {
     
     deploy = x.draws$deploy[1],
     
-    lifetime1 = ifelse(
+    lifetime = ifelse(
       
-      sum(x.draws$draw.1) > 0,
-      which(x.draws$draw.1 > 0)[1],
-      max(x.draws$t)
-      
-    ),
-    
-    lifetime2 = ifelse(
-      
-      sum(x.draws$draw.2) > 0,
-      which(x.draws$draw.2 > 0)[1],
-      max(x.draws$t)
-      
-    ),
-    
-    lifetime3 = ifelse(
-      
-      sum(x.draws$draw.3) > 0,
-      which(x.draws$draw.3 > 0)[1],
+      sum(x.draws$draw) > 0,
+      which(x.draws$draw > 0)[1],
       max(x.draws$t)
       
     )
@@ -566,13 +533,9 @@ kap_mei_lifetime <- function (x) {
   # data.frame to hold it all
   survivorship.all <- data.frame(
     
-    t = rep(1:150, times = 3),
+    t = 1:150,
     
-    S = c(lifetime_to_survivorship(x$lifetime1),
-          lifetime_to_survivorship(x$lifetime2),
-          lifetime_to_survivorship(x$lifetime3)),
-    
-    scen = rep(c(1:3), each = 150)
+    S = lifetime_to_survivorship(x$lifetime)
     
   )
   
@@ -598,8 +561,6 @@ for (i in 1:3000) {
   
   # extract focal iteration
   iter.draw1 <- model.fit.1[i, ]
-  iter.draw2 <- model.fit.2[i, ]
-  iter.draw3 <- model.fit.3[i, ]
   
   # 1. expand deployment dfs - expand_time
   expanded.deploys <- lapply(deploy.split, expand_time, max.t = 150)
