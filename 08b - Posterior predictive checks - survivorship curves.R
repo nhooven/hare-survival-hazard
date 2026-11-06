@@ -585,7 +585,7 @@ for (i in 1:3000) {
   # timing
   if (i %% 50 == 0) {
     
-    diff.time <- difftime(Sys.time(), curr.time, units = "mins")
+    diff.time <- difftime(Sys.time(), start.time, units = "mins")
     
     print(
       
@@ -611,7 +611,7 @@ km_pred <- function (x) {
   
   x.1 <- x %>%
     
-    group_by(scen, t) %>%
+    group_by(t) %>%
     
     mutate(med = median(S),
            pe.low = quantile(S, prob = 0.05),
@@ -621,7 +621,7 @@ km_pred <- function (x) {
     
     ungroup() %>%
     
-    dplyr::select(t, med, pe.low, pe.upp, scen)
+    dplyr::select(t, med, pe.low, pe.upp)
   
   return(x.1)
   
@@ -635,10 +635,13 @@ km.ppc <- km_pred(S.df.all)
 # using all the curves breaks the vector graphics
 # the upper and lower prediction envelopes seem reasonable
 
+# as a weird artifact of putting this on Kamiak once - I called dplyr only!
+library(ggplot2)
+
 # define theme
 km_theme <- function () {
   
-  theme_bw() +
+  theme_classic() +
     
     theme(panel.grid = element_blank(),
           axis.text = element_text(color = "black"),
@@ -648,24 +651,17 @@ km_theme <- function () {
   
 }
 
-# change "scen" labels
-km.ppc$scen.name <- paste0("Scenario ", km.ppc$scen)
-km.df.all$scen.name <- paste0("Scenario ", km.df.all$scen)
-
 #_______________________________________________________________________________
 
 ggplot() +
   
   km_theme() +
   
-  # facet
-  facet_wrap(~ scen.name) +
-  
   # simulated prediction envelopes
   geom_line(data = km.ppc,
             aes(x = t,
                 y = med),
-            color = "aquamarine4",
+            color = "#CC0033",
             linewidth = 1) +
   
   geom_ribbon(data = km.ppc,
@@ -673,11 +669,11 @@ ggplot() +
                   y = med,
                   ymin = pe.low,
                   ymax = pe.upp),
-              alpha = 0.35,
-              fill = "aquamarine4") +
+              alpha = 0.25,
+              fill = "#CC0033") +
   
   # empirical curve confidence envelope
-  geom_ribbon(data = km.df.all,
+  geom_ribbon(data = km.df.1,
               aes(x = t,
                   y = S,
                   ymin = ci.low,
@@ -688,13 +684,15 @@ ggplot() +
               linetype = "dashed") +
   
   # empirical curve
-  geom_line(data = km.df.all,
+  geom_line(data = km.df.1,
             aes(x = t,
                 y = S),
             linetype = "dashed") +
   
-  xlab("Weeks") +
-  ylab("Cumulative survival") +
+  xlab("Weeks since deployment") +
+  ylab("Cumulative survival (%)") +
+  
+  scale_y_continuous(labels = c(0, 25, 50, 75, 100)) +
   
   coord_cartesian(ylim = c(0, 1),
                   xlim = c(4.25, 70))
