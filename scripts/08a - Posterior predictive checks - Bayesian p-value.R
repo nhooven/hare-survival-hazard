@@ -5,8 +5,8 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 01 May 2026 
-# R version: 4.4.3
+# Date last modified: 05 Nov 2026 
+# R version: 4.5.2
 
 #_______________________________________________________________________________
 # 0. Explanation ----
@@ -407,3 +407,7 @@ discrep.i.ALL     # for Bayesian p-value
   summarize(mod1 = sum(Dsim.Dobs) / n())
 
 )
+
+# save
+saveRDS(discrep.sum.ALL, "PPCs/discrep_sum_ALL.rds")
+saveRDS(discrep.i.ALL, "PPCs/discrep_i_ALL.rds")

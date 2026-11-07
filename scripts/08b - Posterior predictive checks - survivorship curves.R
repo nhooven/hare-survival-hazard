@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 05 Nov 2026 
+# Date last modified: 07 Nov 2026 
 # R version: 4.5.2
 
 #_______________________________________________________________________________
@@ -29,7 +29,7 @@ library(mgcv)
 #_______________________________________________________________________________
 
 # model samples
-model.fit.1 <- readRDS("models/model_1.rds")
+model.fit.1 <- readRDS("models/model_clog.rds")
 
 # dataset
 fates <- read.csv("data_cleaned/fates_forModel.csv")
@@ -475,13 +475,13 @@ sim_lifetime <- function (x) {
   x$haz <- calc_spline_pred(x, iter.draw1)
   
   # 2. simulate draws
-  draw_pois <- function (x) {
+  draw_bern <- function (x) {
     
     x.1 <- x %>%
       
       mutate(
         
-        draw = rpois(n(), haz)
+        draw = rbinom(n(), size = 1, prob = 1 - exp(-haz))
         
       )
     
@@ -489,7 +489,7 @@ sim_lifetime <- function (x) {
     
   }
   
-  x.draws <- draw_pois(x)
+  x.draws <- draw_bern(x)
   
   # 3. truncate at first event, extract lifetime
   x.2 <- data.frame(
@@ -697,4 +697,4 @@ ggplot() +
   coord_cartesian(ylim = c(0, 1),
                   xlim = c(4.25, 70))
 
-# 900 x 343
+# 300 x 300

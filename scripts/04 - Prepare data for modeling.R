@@ -5,8 +5,8 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 25 Feb 2026
 # Date completed: 25 Feb 2026
-# Date last modified: 01 May 2026
-# R version: 4.4.3
+# Date last modified: 04 Nov 2026
+# R version: 4.5.2
 
 #_______________________________________________________________________________
 # 1. Load required packages ----
@@ -26,22 +26,27 @@ day.lookup <- read.csv("data_cleaned/day_lookup.csv")
 #_______________________________________________________________________________
 # 3. Construct basis functions for spline on hazard ----
 
-# procedure adapted from https://mc-stan.org/users/documentation/case-studies/splines_in_stan.html
+# we'll use smooth2random here to make sure everything is parameterized right in the model
 
 #_______________________________________________________________________________
 
 # define knots (quantile)
 n.knots <- 9 + 1
 
-knot.list <- quantile(fates$week, 
-                      probs = seq(from = 0, 
-                                  to = 1, 
-                                  length.out = n.knots))
+# construct raw smooth
+smooth.raw <- smoothCon(s(week,
+                          bs = "cp",        # cyclic penalized - what I really want
+                          k = n.knots),
+                        data = fates,
+                        absorb.cons = T)    # identifiability constraint
 
-# create the basis matrix (cyclic spline)
-basis <- cSplineDes(fates$week,
-                    knots = knot.list,
-                    ord = 4)                # cubic
+# smooth2random
+smooth.rand <- smooth2random(smooth.raw[[1]], 
+                             vnames = "",
+                             type = 2) # fixed and random
+
+# random effect basis design
+re.basis <- smooth.rand$rand$Xr
 
 #_______________________________________________________________________________
 # 4. Examine correlations between covariates ----
@@ -146,7 +151,7 @@ constant.list = list(
   # dimensions
   N = nrow(fates),              
   nclust = 4, 
-  nbasis = ncol(basis),
+  nbasis = ncol(re.basis),
   
   # indices
   cluster = fates$cluster,
@@ -154,7 +159,7 @@ constant.list = list(
   deployment = fates$deployment.1,
   
   # spline
-  basis = basis,
+  basis = re.basis,
   
   # BCI imputation
   bci.mean = fates.deploy$bci.mean,
@@ -170,9 +175,7 @@ constant.list = list(
 data.list <- list(
   
   # responses, split by scenario
-  y_mort_1 = fates$y.mort.scen1,
-  y_mort_2 = fates$y.mort.scen2,
-  y_mort_3 = fates$y.mort.scen3,
+  y = fates$y.mort1,
   
   # individual-week covariates
   # treatment
@@ -180,6 +183,9 @@ data.list <- list(
   post2 = fates$post2,
   ret = fates$ret,
   pil = fates$pil,
+  
+  # collar
+  collar = fates$collar,
   
   # extrinsic
   study_week = (fates$study.week - mean(fates$study.week)) / sd(fates$study.week),

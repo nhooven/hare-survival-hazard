@@ -1,11 +1,11 @@
 # Project: WSU Snowshoe Hare and PCT Project
 # Subproject: Survival and hazard modeling
-# Script: 05b - Fit hazard models (REVISION 1)
+# Script: 05c - Fit hazard models (REVISION 1 - ZIP)
 # Author: Nathan D. Hooven, Graduate Research Assistant
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 25 Nov 2025
-# Date last modified: 04 Nov 2026 
+# Date last modified: 06 Nov 2026 
 # R version: 4.5.2
 
 #_______________________________________________________________________________
@@ -17,11 +17,13 @@ library(nimbleHMC)       # HMC in nimble
 library(coda)            # model outputs
 
 #_______________________________________________________________________________
-# 2. Read in data ----
+# 2. Read in data and source ZIP function ----
 #_______________________________________________________________________________
 
 constant.list <- readRDS("data_cleaned/constants.rds")
 data.list <- readRDS("data_cleaned/data.rds")
+
+source("functions/zip.R")
 
 #_______________________________________________________________________________
 # 3. Model code ----
@@ -30,6 +32,9 @@ data.list <- readRDS("data_cleaned/data.rds")
 model.code <- nimbleCode({
   
   # priors
+  # zero-inflated probability
+  zp ~ dunif(0, 1)
+  
   # baseline hazard spline
   # a0 - spline intercept
   a0_mean ~ dnorm(log(0.01), sd = 1)      # mean intercept
@@ -150,7 +155,7 @@ model.code <- nimbleCode({
     wb[i, 1:nbasis] <- wsc[sex[i], cluster[i], 1:nbasis] * basis[i, 1:nbasis]
     
     # Poisson likelihood
-    y[i] ~ dpois(
+    y[i] ~ dZIP(lambda = 
       
       # baseline hazard (hierarchical spline)
       exp(a0sc[sex[i], cluster[i]] + sum(wb[i, 1:nbasis])) * 
@@ -160,9 +165,9 @@ model.code <- nimbleCode({
           
           # collar type
           b_col * collar[i] +
-          
-          # BCI - by deployment
-          b_bci * bci.s[deployment[i]] + 
+            
+            # BCI - by deployment
+            b_bci * bci.s[deployment[i]] + 
             
             # landscape
             b_dm * dm[i] +
@@ -178,7 +183,9 @@ model.code <- nimbleCode({
             b_pil_post1 * pil[i] * post1[i] +
             b_pil_post2 * pil[i] * post2[i]
           
-        )
+        ),
+      
+      zeroProb = zp
       
     )
     
@@ -191,6 +198,9 @@ model.code <- nimbleCode({
 # ______________________________________________________________________________
 
 inits <- list(
+  
+  # zero-inflated probability
+  zp = rbeta(1, 2, 2),
   
   # baseline hazard spline
   # a0 - spline intercept
@@ -211,18 +221,22 @@ inits <- list(
   bm = rnorm(1, 0, 1),
   hfl = ifelse(is.na(data.list$hfl) == F, NA, 13),
   mass = ifelse(is.na(data.list$mass) == F, NA, 1.0),
+  hfl0 = runif(1, log(11), log(14)),
+  mass0 = runif(1, log(0.8), log(1.1)),
+  hfl_sd = rexp(1, rate = 1),
+  mass_sd = rexp(1, rate = 1),
   
-  # coefficients (Cauchy priors)
-  b_col = rnorm(1, 0, 2.5),
-  b_bci = rnorm(1, 0, 2.5),
-  b_dm = rnorm(1, 0, 2.5),
-  b_open = rnorm(1, 0, 2.5),
-  b_post1 = rnorm(1, 0, 2.5),
-  b_post2 = rnorm(1, 0, 2.5),
-  b_ret_post1 = rnorm(1, 0, 2.5),
-  b_ret_post2 = rnorm(1, 0, 2.5),
-  b_pil_post1 = rnorm(1, 0, 2.5),
-  b_pil_post2 = rnorm(1, 0, 2.5),
+  # coefficients (needed to shrink because these caused Infs)
+  b_col = rnorm(1, 0, 0.1),
+  b_bci = rnorm(1, 0, 0.1),
+  b_dm = rnorm(1, 0, 0.1),
+  b_open = rnorm(1, 0, 0.1),
+  b_post1 = rnorm(1, 0, 0.1),
+  b_post2 = rnorm(1, 0, 0.1),
+  b_ret_post1 = rnorm(1, 0, 0.1),
+  b_ret_post2 = rnorm(1, 0, 0.1),
+  b_pil_post1 = rnorm(1, 0, 0.1),
+  b_pil_post2 = rnorm(1, 0, 0.1),
   
   # random spline parameters
   # sex
@@ -230,20 +244,20 @@ inits <- list(
   lams_z = rnorm(2, 0, sd = 1),
   
   # sex x basis [2, nbasis]
-  ws_z = matrix(rnorm(2 * constant.list$nbasis, 0, 1),
+  ws_z = matrix(rnorm(2 * constant.list$nbasis, 0, 0.1),
                 nrow = 2,
                 ncol = constant.list$nbasis),
   
   # sex / cluster [2, 4]
-  a0sc = matrix(rnorm(2 * 4, 0, sd = 1),
+  a0sc = matrix(rnorm(2 * 4, 0, sd = 0.5),
                 nrow = 2,
                 ncol = 4),
-  lamsc = matrix(rexp(2 * 4, 1),
-                 nrow = 2,
-                 ncol = 4),
+  log_lamsc = matrix(rnorm(2 * 4, 0, sd = 0.5),
+                     nrow = 2,
+                     ncol = 4),
   
   # (sex / cluster) x basis [2, 4, nbasis]
-  wsc_z = array(rnorm(2 * 4 * constant.list$nbasis, 0, sd = 1),
+  wsc_z = array(rnorm(2 * 4 * constant.list$nbasis, 0, sd = 0.1),
                 dim = c(2, 4, constant.list$nbasis))
   
 )
@@ -253,6 +267,9 @@ inits <- list(
 # ______________________________________________________________________________
 
 monitor <- c(
+  
+  # zero-inflated probability
+  "zp",
   
   # mean spline parameters
   "a0_mean",
@@ -279,7 +296,7 @@ monitor <- c(
 )
 
 # ______________________________________________________________________________
-# 6. Set up models ----
+# 6. Set up model ----
 # ______________________________________________________________________________
 
 # model 1
@@ -292,6 +309,9 @@ model.1 <- nimbleModel(
   buildDerivs = TRUE  
   
 )
+
+# check model prob
+model.1$calculate()
 
 # check node size
 length(model.1$getNodeNames())
@@ -319,9 +339,6 @@ mcmc.1.comp <- compileNimble(model.1.mcmc, project = model.1)
 
 # ______________________________________________________________________________
 # 10. Run sampling ----
-
-# we'll aim for 3,000 posterior samples, keeping 1k from each chain
-
 # ______________________________________________________________________________
 
 # model 1
@@ -335,8 +352,10 @@ model.1.run <- runMCMC(
   
 )
 
+summary(model.1.run)
+
 # ______________________________________________________________________________
 # 11. Save samples ----
 # ______________________________________________________________________________
 
-saveRDS(model.1.run, "models/model_1.rds")
+saveRDS(model.1.run, "models/model_zip.rds")
