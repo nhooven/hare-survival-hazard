@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 17 Nov 2025 
-# Date last modified: 05 Nov 2026 
+# Date last modified: 09 Nov 2026 
 # R version: 4.5.2
 
 #_______________________________________________________________________________
@@ -19,7 +19,7 @@ library(tidyverse)       # manipulate and clean data
 #_______________________________________________________________________________
 
 # model samples
-model.fit.1 <- readRDS("models/model_1.rds")
+model.fit.1 <- readRDS("models/model_clog.rds")
 
 # dataset
 fates <- read.csv("data_cleaned/fates_forModel.csv")
@@ -433,8 +433,9 @@ ggplot(data = schoen.resid.continuous) +
                   weight = 1 / sd),
               method = "gam",
               se = T,
-              color = "aquamarine4",
-              fill = "aquamarine4") +
+              color = "#CC0033",
+              fill = "#CC0033",
+              alpha = 0.25) +
   
   theme(panel.grid = element_blank(),
         axis.text = element_text(color = "black"),
@@ -475,8 +476,9 @@ ggplot(data = schoen.resid.trt.1) +
                   weight = 1 / sd),
               method = "gam",
               se = T,
-              color = "aquamarine4",
-              fill = "aquamarine4") +
+              color = "#CC0033",
+              fill = "#CC0033",
+              alpha = 0.25) +
   
   # POST1
   geom_smooth(data = schoen.resid.trt.1 |> filter(period == "POST2"),
@@ -485,8 +487,9 @@ ggplot(data = schoen.resid.trt.1) +
                   weight = 1 / sd),
               method = "gam",
               se = T,
-              color = "aquamarine4",
-              fill = "aquamarine4") +
+              color = "#CC0033",
+              fill = "#CC0033",
+              alpha = 0.25) +
   
   theme(panel.grid = element_blank(),
         axis.text = element_text(color = "black"),

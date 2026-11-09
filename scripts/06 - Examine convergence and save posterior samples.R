@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 22 Jan 2026 
 # Date completed: 22 Jan 2026 
-# Date last modified: 05 Nov 2026 
+# Date last modified: 09 Nov 2026 
 # R version: 4.5.2
 
 #_______________________________________________________________________________
@@ -21,7 +21,7 @@ library(bayestestR)
 # 2. Read in posterior samples ----
 #_______________________________________________________________________________
 
-model.1 <- readRDS("models/model_1.rds")
+model.1 <- readRDS("models/model_clog.rds")
 
 #_______________________________________________________________________________
 # 3. Summarize main parameters ----

@@ -5,8 +5,8 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 02 Mar 2026 
-# Date last modified: 01 Sep 2026 
-# R version: 4.4.3
+# Date last modified: 09 Nov 2026 
+# R version: 4.5.2
 
 #_______________________________________________________________________________
 # 1. Load required packages ----
@@ -21,17 +21,13 @@ library(bayestestR)      # HDIs
 #_______________________________________________________________________________
 
 # model samples
-model.fit.1 <- readRDS("models/model_1.rds")
-model.fit.2 <- readRDS("models/model_2.rds")
-model.fit.3 <- readRDS("models/model_3.rds")
+model.fit.1 <- readRDS("models/model_clog.rds")
 
 # dataset
 fates <- read.csv("data_cleaned/fates_forModel.csv")
 
 # convert to data.frame
 model.fit.1 <- as.data.frame(do.call(rbind, model.fit.1))
-model.fit.2 <- as.data.frame(do.call(rbind, model.fit.2))
-model.fit.3 <- as.data.frame(do.call(rbind, model.fit.3))
 
 #_______________________________________________________________________________
 # 3. Define spline ----
@@ -40,19 +36,26 @@ model.fit.3 <- as.data.frame(do.call(rbind, model.fit.3))
 # define knots (quantile)
 n.knots <- 9 + 1
 
-knot.list <- quantile(fates$week, 
-                      probs = seq(from = 0, 
-                                  to = 1, 
-                                  length.out = n.knots))
+# construct raw smooth (SAME as model fit)
+smooth.raw <- smoothCon(s(week,
+                          bs = "cp",        # cyclic penalized - what I really want
+                          k = n.knots),
+                        data = fates,
+                        absorb.cons = T)    # identifiability constraint
 
 # weeks to predict on
-weeks.pred <- seq(1, 52, length.out = 100)
+pred.df <- data.frame(week = seq(1, 52, length.out = 100))
 
-# first, we need to create the "normal" scale predictions
-# let's create a prediction df first
-basis.pred <- cSplineDes(weeks.pred,
-                         knots = knot.list,
-                         ord = 4)
+# smooth2random
+smooth.rand <- smooth2random(smooth.raw[[1]], 
+                             vnames = "",
+                             type = 2) # fixed and random
+
+# new predict grid
+smooth.pred <- PredictMat(smooth.raw[[1]], pred.df)
+
+# new basis, correctly rotated
+basis.pred <- smooth.pred %*% smooth.rand$trans.U %*% diag(smooth.rand$trans.D)
 
 #_______________________________________________________________________________
 # 4. Calculate each hazard prediction ----
@@ -185,8 +188,6 @@ haz_spline <- function (
 
 # apply function
 spline.summary.mod1 <- haz_spline(model.fit.1)
-spline.summary.mod2 <- haz_spline(model.fit.2)
-spline.summary.mod3 <- haz_spline(model.fit.3)
 
 #_______________________________________________________________________________
 # 4. Process predictions for plotting ----
@@ -202,7 +203,7 @@ spline_forPlot <- function (x) {
     mutate(
       
       # add week
-      t = rep(weeks.pred, times = 8),
+      t = rep(pred.df$week, times = 8),
       
       # add life zone
       lz = ifelse(cluster == 4, "XMC", "SFL"),
@@ -222,8 +223,6 @@ spline_forPlot <- function (x) {
 
 # apply function
 spline.forPlot.mod1 <- spline_forPlot(spline.summary.mod1[[1]])
-spline.forPlot.mod2 <- spline_forPlot(spline.summary.mod2[[1]])
-spline.forPlot.mod3 <- spline_forPlot(spline.summary.mod3[[1]])
 
 #_______________________________________________________________________________
 # 4b. M:F hazard ratio ----
@@ -237,7 +236,7 @@ spline_hr_forPlot <- function (x) {
     mutate(
       
       # add week
-      t = rep(weeks.pred, times = 4),
+      t = rep(pred.df$week, times = 4),
       
       # add life zone
       lz = ifelse(cluster == 4, "XMC", "SFL"),
@@ -256,8 +255,6 @@ spline_hr_forPlot <- function (x) {
 
 # apply function
 spline.hr.forPlot.mod1 <- spline_hr_forPlot(spline.summary.mod1[[2]])
-spline.hr.forPlot.mod2 <- spline_hr_forPlot(spline.summary.mod2[[2]])
-spline.hr.forPlot.mod3 <- spline_hr_forPlot(spline.summary.mod3[[2]])
 
 #_______________________________________________________________________________
 # 5. Plot predictions ----
@@ -331,7 +328,7 @@ haz_plot <- function (x) {
     
     # coordinates
     coord_cartesian(xlim = c(3.5, 49.7),
-                    ylim = c(0.009, 0.26)) +
+                    ylim = c(0.009, 0.16)) +
     
     # colors
     scale_color_manual(values = c("#003300", "#669900")) +
@@ -340,7 +337,7 @@ haz_plot <- function (x) {
 }
 
 # apply function
-haz_plot(spline.forPlot.mod2)
+haz_plot(spline.forPlot.mod1)
 
 # 600 x 320
 ggsave("final_plots/Figure_6.pdf",
@@ -350,75 +347,11 @@ ggsave("final_plots/Figure_6.pdf",
        scale = 3.5,
        units = "px")
 
-#_______________________________________________________________________________
-# 5b. Expected hazard across the annual cycle, all models ----
-#_______________________________________________________________________________
-
-spline.forPlot.all <- rbind(spline.forPlot.mod1 %>% mutate(scenario = "1"),
-                            spline.forPlot.mod2 %>% mutate(scenario = "2"),
-                            spline.forPlot.mod3 %>% mutate(scenario = "3"))
 
 
-# function
-haz_plot_all <- function (x) {
-  
-  ggplot(data = x) +
-    
-    theme_bw() +
-    
-    facet_grid(sex ~ cluster) +
-    
-    # credible interval
-    geom_ribbon(aes(x = t,
-                    ymin = low,
-                    ymax = upp,
-                    fill = scenario),
-                alpha = 0.15) +
-    
-    # median
-    geom_line(aes(x = t,
-                  y = med,
-                  color = scenario),
-              linewidth = 0.9) +
-    
-    # theme arguments
-    theme(panel.grid = element_blank(),
-          panel.border = element_rect(color = "gray"),
-          axis.title.x = element_blank(),
-          axis.text = element_text(color = "black"),
-          axis.text.x = element_text(vjust = 0.25,
-                                     hjust = 0,
-                                     angle = 90,
-                                     size = 7),
-          legend.position = "top",
-          legend.background = element_rect(color = "black"),
-          legend.title = element_text(size = 8),
-          strip.text = element_text(hjust = 0),
-          strip.text.x = element_text(size = 7),
-          strip.background = element_rect(fill = "gray90",
-                                          linetype = "blank")) +
-    
-    # axis labels
-    scale_x_continuous(breaks = month.cutoffs.some$breaks,
-                       labels = month.cutoffs.some$labels) +
-    
-    scale_y_continuous(breaks = c(0.04, 0.08, 0.12, 0.16, 0.20, 0.24)) +
-    
-    # axis labels
-    ylab("Baseline hazard") +
-    
-    # coordinates
-    coord_cartesian(xlim = c(3.5, 49.7),
-                    ylim = c(0.009, 0.26)) +
-    
-    scale_color_viridis_d() +
-    scale_fill_viridis_d()
-  
-}
 
-haz_plot_all(spline.forPlot.all)
 
-# 600 x 360 
+
 
 #_______________________________________________________________________________
 # 5b. log(M:F hazard ratio) across the annual cycle ----

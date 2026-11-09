@@ -5,8 +5,8 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 01 May 2026
 # Date completed: 01 May 2026
-# Date last modified: 01 May 2026
-# R version: 4.4.3
+# Date last modified: 09 Nov 2026
+# R version: 4.5.2
 
 #_______________________________________________________________________________
 # 0. Explanation ----
@@ -31,7 +31,7 @@ library(bayestestR)      # HDIs
 #_______________________________________________________________________________
 
 # model samples
-model.fit.2 <- readRDS("models/model_2.rds")
+model.fit.1 <- readRDS("models/model_clog.rds")
 
 # dataset
 fates <- read.csv("data_cleaned/fates_forModel.csv")
@@ -67,6 +67,7 @@ set.to.pred <- data.frame(
   
   # keep at their means
   BCI.1 = 0,
+  collar = 0,
   DM = 0,
   OPEN = 0,
   
@@ -79,22 +80,29 @@ set.to.pred <- data.frame(
 # 4. Spline for prediction ----
 #_______________________________________________________________________________
 
-# define knots (quantile)
+# define knots
 n.knots <- 9 + 1
 
-knot.list <- quantile(fates$week, 
-                      probs = seq(from = 0, 
-                                  to = 1, 
-                                  length.out = n.knots))
+# construct raw smooth (SAME as model fit)
+smooth.raw <- smoothCon(s(week,
+                          bs = "cp",        # cyclic penalized - what I really want
+                          k = n.knots),
+                        data = fates,
+                        absorb.cons = T)    # identifiability constraint
 
 # weeks to predict on
-weeks.pred <- 1:52
+pred.df <- data.frame(week = 1:52)
 
-# first, we need to create the "normal" scale predictions
-# let's create a prediction df first
-basis.pred <- cSplineDes(weeks.pred,
-                         knots = knot.list,
-                         ord = 4)
+# smooth2random
+smooth.rand <- smooth2random(smooth.raw[[1]], 
+                             vnames = "",
+                             type = 2) # fixed and random
+
+# new predict grid
+smooth.pred <- PredictMat(smooth.raw[[1]], pred.df)
+
+# new basis, correctly rotated
+basis.pred <- smooth.pred %*% smooth.rand$trans.U %*% diag(smooth.rand$trans.D)
 
 #_______________________________________________________________________________
 # 5. Calculate cumulative survival - function ----
@@ -160,6 +168,7 @@ calc_surv <- function (x, y) {
     
     # all should be zero
     y["b_bci"] * x$BCI +
+    y["b_col"] * x$collar +
     y["b_dm"] * x$DM +
     y["b_open"] * x$OPEN +
       
@@ -196,7 +205,7 @@ calc_surv <- function (x, y) {
 
 set.to.pred.split <- split(set.to.pred, set.to.pred$index)
 
-draws <- do.call(rbind, model.fit.2)
+draws <- do.call(rbind, model.fit.1)
 
 #_______________________________________________________________________________
 
@@ -255,9 +264,9 @@ all.S.summary <- all.S %>%
   mutate(
     
     sex = ifelse(sex == 0, "F", "M"),
-    yr = case_when(post1 == 1 ~ "YR 1",
-                   post2 == 1 ~ "YR 2"),
-    trt = case_when(ret == 0 & pil == 0 ~ "control",
+    yr = case_when(post1 == 1 ~ "POST1",
+                   post2 == 1 ~ "POST2"),
+    trt = case_when(ret == 0 & pil == 0 ~ "unthinned",
                     ret == 1 & pil == 0 ~ "retention",
                     ret == 0 & pil == 1 ~ "piling")
     
@@ -281,9 +290,10 @@ all.S.summary <- all.S %>%
     
   ) %>%
   
-  # month as factor
+  # month and trt as factor
   mutate(month = factor(month,
-                        levels = c("3", "6", "12")))
+                        levels = c("3", "6", "12")),
+         trt = factor(trt, levels = c("unthinned", "retention", "piling")))
 
 #_______________________________________________________________________________
 # 7. Plot ----
@@ -334,5 +344,9 @@ ggplot(data = all.S.summary) +
 #_______________________________________________________________________________
 # 8. Summary table ----
 #_______________________________________________________________________________
+
+all.S.summary <- all.S.summary |>
+  
+  arrange(trt, yr, sex)
 
 write.table(all.S.summary, "clipboard", sep = "\t")
