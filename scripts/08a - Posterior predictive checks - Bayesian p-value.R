@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 17 Nov 2025
-# Date last modified: 05 Nov 2026 
+# Date last modified: 09 Nov 2026 
 # R version: 4.5.2
 
 #_______________________________________________________________________________
@@ -36,7 +36,7 @@ library(mgcv)
 #_______________________________________________________________________________________________
 
 # model samples
-model.fit.1 <- readRDS("models/model_1.rds")
+model.fit.1 <- readRDS("models/model_clog.rds")
 
 # dataset
 fates <- read.csv("data_cleaned/fates_forModel.csv")
@@ -252,38 +252,51 @@ e_sim_morts <- function (x) {
     # keep only columns we need
     dplyr::select(y.mort1, haz) %>%
     
-    # take Poisson draws using each hazard
+    # Cloglog
+    mutate(p = 1 - exp(-haz)) |>
+    
+    # take Bernoulli draws using each hazard
     # must take the correct number of draws so our discrepancy doesn't explode!
-    mutate(pois.draw = ifelse(rpois(n(), haz) > 0, 1, 0)) %>%
+    mutate(bern.draw = rbinom(n(), size = 1, prob = p)) %>%
     
     # summarize
     summarize(
       
-      # expected mort frequencies (sum the hazards)
-      e.mort = sum(haz),
+      # expected mort frequencies (sum the p)
+      e.mort = sum(p),
       
       # observed mort frequencies
       o.mort = sum(y.mort1),
       
       # simulated mort frequencies
-      s.mort = sum(pois.draw)
+      s.mort = sum(bern.draw)
       
     ) %>%
     
     # calculate the discrepancy measure
+    # chi-square
     # Dj = ((sim/obs events - predicted events)^2) / predicted events
+    
+    # freeman-tukey
+    # Dj = (sqrt(sim/obs events) - sqrt(predicted))^2
     mutate(
       
-      # simulated
-      discrep.sim = ((s.mort - e.mort)^2) / e.mort,
+      # Chi
+      discrep.sim.chi = ((s.mort - e.mort)^2) / e.mort,
+      discrep.obs.chi = ((o.mort - e.mort)^2) / e.mort,
       
-      # observed
-      discrep.obs = ((o.mort - e.mort)^2) / e.mort,
+      # FT
+      discrep.sim.ft = (sqrt(s.mort) - sqrt(e.mort))^2,
+      discrep.obs.ft = (sqrt(o.mort) - sqrt(e.mort))^2
+      
       
     ) %>%
     
     # keep only the discrep columns
-    dplyr::select(discrep.sim, discrep.obs)
+    dplyr::select(discrep.sim.chi, 
+                  discrep.obs.chi,
+                  discrep.sim.ft, 
+                  discrep.obs.ft)
   
   # return
   return(x.1)
@@ -331,7 +344,7 @@ for (i in 1:3000) {
     focal.week.2 <- do.call(rbind, lapply(deploy.split, calc_haz))
     
     # calculate expected mortalities and simulate
-    # returns a df with scen and boolean column Dsim > Dobs
+    # returns a df with boolean column Dsim > Dobs
     # we'll add a j index
     discrep.df <- cbind(j, e_sim_morts(focal.week.2))
     
@@ -345,13 +358,18 @@ for (i in 1:3000) {
     
     summarize(
       
-      discrep.sim.sum = sum(discrep.sim),
-      discrep.obs.sum = sum(discrep.obs)
+      discrep.sim.chi.sum = sum(discrep.sim.chi),
+      discrep.obs.chi.sum = sum(discrep.obs.chi),
+      discrep.sim.ft.sum = sum(discrep.sim.ft),
+      discrep.obs.ft.sum = sum(discrep.obs.ft)
       
       ) %>%
     
     # keep only the sum columns
-    dplyr::select(discrep.sim.sum, discrep.obs.sum) %>%
+    dplyr::select(discrep.sim.chi.sum, 
+                  discrep.obs.chi.sum,
+                  discrep.sim.ft.sum, 
+                  discrep.obs.ft.sum) %>%
     
     # and add an index for i
     mutate(i = i)
@@ -361,12 +379,14 @@ for (i in 1:3000) {
   
     mutate(
       
-      Dsim.Dobs = discrep.sim.sum > discrep.obs.sum
+      Dsim.Dobs.chi = discrep.sim.chi.sum > discrep.obs.chi.sum,
+      Dsim.Dobs.ft = discrep.sim.ft.sum > discrep.obs.ft.sum
       
     ) %>%
     
     # keep only the Dsim > Dobs columns
-    dplyr::select(Dsim.Dobs) %>%
+    dplyr::select(Dsim.Dobs.chi, 
+                  Dsim.Dobs.ft) %>%
     
     # and add an index for i
     mutate(i = i)
@@ -404,10 +424,72 @@ discrep.i.ALL     # for Bayesian p-value
 
 (bayes.p <- discrep.i.ALL %>%
   
-  summarize(mod1 = sum(Dsim.Dobs) / n())
+  summarize(chi = sum(Dsim.Dobs.chi) / n(),
+            ft = sum(Dsim.Dobs.ft) / n())
 
 )
 
 # save
 saveRDS(discrep.sum.ALL, "PPCs/discrep_sum_ALL.rds")
 saveRDS(discrep.i.ALL, "PPCs/discrep_i_ALL.rds")
+
+discrep.sum.ALL <- readRDS("PPCs/discrep_sum_ALL.rds")
+discrep.i.ALL <- readRDS("PPCs/discrep_i_ALL.rds")
+
+#_______________________________________________________________________________
+# 7. Plot ----
+
+# mirroring Jones et al. (2020)
+# https://wildlife.onlinelibrary.wiley.com/doi/10.1002/jwmg.21886
+
+library(ggplot2)
+
+#_______________________________________________________________________________
+# 7a. Chi-square ----
+#_______________________________________________________________________________
+
+ggplot(data = discrep.sum.ALL) +
+  
+  theme_classic() +
+  
+  # 1:1 line
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+  
+  geom_point(aes(x = discrep.obs.chi.sum,
+                 y = discrep.sim.chi.sum),
+             alpha = 0.25,
+             size = 0.75,
+             shape = 21,
+             color = "#CC0033") +
+  
+  # axes
+  coord_cartesian(xlim = c(100, 275),
+                  ylim = c(100, 275)) +
+  
+  xlab("Observed discrepancy") +
+  ylab("Simulated discrepancy")
+
+#_______________________________________________________________________________
+# 7b. Freeman-Tukey ----
+#_______________________________________________________________________________
+
+ggplot(data = discrep.sum.ALL) +
+  
+  theme_classic() +
+  
+  # 1:1 line
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+  
+  geom_point(aes(x = discrep.obs.ft.sum,
+                 y = discrep.sim.ft.sum),
+             alpha = 0.25,
+             size = 0.75,
+             shape = 21,
+             color = "#CC0033") +
+  
+  # axes
+  coord_cartesian(xlim = c(50, 95),
+                  ylim = c(50, 95)) +
+  
+  xlab("Observed discrepancy") +
+  ylab("Simulated discrepancy")
