@@ -483,6 +483,6 @@ ggplot(data = schoen.resid.trt.1) +
         legend.position = "none") +
   
   xlab("Study week") +
-  ylab("Scaled Schoenfeld residual")
+  ylab(expression("Scaled Schoenfeld residual + "*beta))
 
 # 750 x 286
