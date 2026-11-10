@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 14 Nov 2025 
 # Date completed: 17 Nov 2025 
-# Date last modified: 09 Nov 2026 
+# Date last modified: 10 Nov 2026 
 # R version: 4.5.2
 
 #_______________________________________________________________________________
@@ -287,10 +287,10 @@ calc_schoen_resid <- function (
       
       for (j in 1:nrow(.coefs)) {
         
-        coef.vec <- as.numeric(.coefs[j, ])
+        coef.vec <- as.numeric(.coefs[j, ])   
         r.vec <- as.numeric(r.ik[j, ])
         
-        r.star.ik[j, ] <- coef.vec + vcov.inv %*% r.vec
+        r.star.ik[j, ] <- coef.vec + vcov %*% r.vec
         
       } # j - posterior samples
       
@@ -418,19 +418,12 @@ ggplot(data = schoen.resid.continuous) +
   facet_wrap(~ cov,
              scales = "free_y") +
   
-  geom_errorbar(aes(x = study.week,
-                    y = mean,
-                    ymin = l90,
-                    ymax = u90),
-                width = 0) +
-  
   geom_point(aes(x = study.week,
                  y = mean),
-             size = 0.5) +
+             shape = 21) +
   
   geom_smooth(aes(x = study.week,
-                  y = mean,
-                  weight = 1 / sd),
+                  y = mean),
               method = "gam",
               se = T,
               color = "#CC0033",
@@ -444,7 +437,7 @@ ggplot(data = schoen.resid.continuous) +
         legend.position = "none") +
   
   xlab("Study week") +
-  ylab("Scaled Schoenfeld residual")
+  ylab(expression("Scaled Schoenfeld residual + "*beta))
 
 # 500 x 500
 
@@ -459,21 +452,14 @@ ggplot(data = schoen.resid.trt.1) +
   facet_wrap(~ cov1,
              scales = "free_y") +
   
-  geom_errorbar(aes(x = study.week,
-                    y = mean,
-                    ymin = l90,
-                    ymax = u90),
-                width = 0) +
-  
   geom_point(aes(x = study.week,
                  y = mean),
-             size = 0.5) +
+             shape = 21) +
   
   # POST1
   geom_smooth(data = schoen.resid.trt.1 |> filter(period == "POST1"),
               aes(x = study.week,
-                  y = mean,
-                  weight = 1 / sd),
+                  y = mean),
               method = "gam",
               se = T,
               color = "#CC0033",
@@ -483,8 +469,7 @@ ggplot(data = schoen.resid.trt.1) +
   # POST1
   geom_smooth(data = schoen.resid.trt.1 |> filter(period == "POST2"),
               aes(x = study.week,
-                  y = mean,
-                  weight = 1 / sd),
+                  y = mean),
               method = "gam",
               se = T,
               color = "#CC0033",
