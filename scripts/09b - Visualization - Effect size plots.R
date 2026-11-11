@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2025 
 # Date completed: 01 Dec 2025
-# Date last modified: 09 Nov 2026
+# Date last modified: 11 Nov 2026
 # R version: 4.5.2
 
 #_______________________________________________________________________________
@@ -465,7 +465,7 @@ plot_by_scen <- function (long.draws, ci) {
     
     plotlist = out.plot, 
     nrow = 3,
-    rel_heights = c(1.4, 1.0, 1.35)
+    rel_heights = c(1.4, 1.0, 1.3)
     
     )
   
