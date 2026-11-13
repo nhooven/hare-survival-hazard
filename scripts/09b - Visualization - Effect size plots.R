@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 19 Nov 2025 
 # Date completed: 01 Dec 2025
-# Date last modified: 11 Nov 2026
+# Date last modified: 13 Nov 2026
 # R version: 4.5.2
 
 #_______________________________________________________________________________
@@ -236,6 +236,16 @@ plot_by_scen <- function (long.draws, ci) {
                    linewidth = 1.75,
                    position = position_nudge(y = -0.1)) +
     
+    # median
+    geom_point(data = ci.panel.1,
+               aes(x = med,
+                   y = name),
+               shape = 21,
+               color = "black",
+               fill = "white",
+               stroke = 0.8,
+               position = position_nudge(y = -0.1)) +
+    
     # x-axis scale
     scale_x_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4)) +
     
@@ -335,6 +345,16 @@ plot_by_scen <- function (long.draws, ci) {
                    linewidth = 1.75,
                    position = position_nudge(y = -0.1)) +
     
+    # median
+    geom_point(data = ci.panel.2,
+               aes(x = med,
+                   y = name),
+               shape = 21,
+               color = "black",
+               fill = "white",
+               stroke = 0.8,
+               position = position_nudge(y = -0.1)) +
+    
     # x-axis scale
     scale_x_continuous(breaks = c(0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4)) +
     
@@ -432,6 +452,16 @@ plot_by_scen <- function (long.draws, ci) {
                    height = 0,
                    linewidth = 1.75,
                    position = position_nudge(y = -0.1)) +
+    
+    # median
+    geom_point(data = ci.panel.3,
+               aes(x = med,
+                   y = name),
+               shape = 21,
+               color = "black",
+               fill = "white",
+               stroke = 0.8,
+               position = position_nudge(y = -0.1)) +
     
     # axis title
     xlab("Hazard ratio") +

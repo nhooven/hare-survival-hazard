@@ -5,7 +5,7 @@
 # Email: nathan.hooven@wsu.edu / nathan.d.hooven@gmail.com
 # Date began: 17 Nov 2025 
 # Date completed: 02 Mar 2026 
-# Date last modified: 09 Nov 2026 
+# Date last modified: 13 Nov 2026 
 # R version: 4.5.2
 
 #_______________________________________________________________________________
@@ -274,7 +274,7 @@ month.cutoffs.some <- data.frame(breaks = c(5.57, 14.29, 22.71, 31.43, 40.14, 48
                                 labels = c("Nov", "Jan", "Mar", "May", "Jul", "Sep"))
 
 #_______________________________________________________________________________
-# 5a. Expected hazard across the annual cycle, one model at a time ----
+# 5a. Expected hazard across the annual cycle, life zone colors ----
 #_______________________________________________________________________________
 
 # function
@@ -339,6 +339,63 @@ haz_plot <- function (x) {
 # apply function
 haz_plot(spline.forPlot.mod1)
 
+#_______________________________________________________________________________
+# 5b. Expected hazard across the annual cycle, basic colors ----
+#_______________________________________________________________________________
+
+# function
+haz_plot2 <- function (x) {
+  
+  ggplot(data = x) +
+    
+    theme_bw() +
+    
+    facet_grid(sex ~ cluster) +
+    
+    # credible interval
+    geom_ribbon(aes(x = t,
+                    ymin = low,
+                    ymax = upp),
+                alpha = 0.25) +
+    
+    # median
+    geom_line(aes(x = t,
+                  y = med),
+              linewidth = 0.9) +
+    
+    # theme arguments
+    theme(panel.grid = element_blank(),
+          axis.title.x = element_blank(),
+          axis.text = element_text(color = "black"),
+          axis.text.x = element_text(vjust = 0.25,
+                                     hjust = 0,
+                                     angle = 90,
+                                     size = 7),
+          legend.position = "none",
+          legend.background = element_rect(color = "black"),
+          strip.text = element_text(hjust = 0),
+          strip.text.x = element_text(size = 7),
+          strip.background = element_rect(fill = "gray90",
+                                          linetype = "blank")) +
+    
+    # axis labels
+    scale_x_continuous(breaks = month.cutoffs.some$breaks,
+                       labels = month.cutoffs.some$labels) +
+    
+    scale_y_continuous(breaks = c(0.05, 0.10, 0.15)) +
+    
+    # axis labels
+    ylab("Baseline hazard") +
+    
+    # coordinates
+    coord_cartesian(xlim = c(3.5, 49.7),
+                    ylim = c(0.007, 0.16))
+  
+}
+
+# apply function
+haz_plot2(spline.forPlot.mod1)
+
 # 600 x 320
 ggsave("final_plots/Figure_6.pdf",
        device = "pdf",
@@ -346,11 +403,6 @@ ggsave("final_plots/Figure_6.pdf",
        height = 320,
        scale = 3.5,
        units = "px")
-
-
-
-
-
 
 
 #_______________________________________________________________________________
